@@ -225,7 +225,7 @@ if not st.session_state.autenticado:
         st.markdown("### 🔑 Ingreso al Sistema")
         u = st.text_input("Usuario")
         p = st.text_input("Contraseña", type="password")
-        if st.button("🚀 Iniciar Sesión", use_container_width=True):
+        if st.button(" Iniciar Sesión", use_container_width=True):
             p_hash = encriptar_password(p)
             user = db.query(Usuario).filter(Usuario.nombre == u).first()
             if user and (user.password_hash == p_hash or user.password_hash == p):
