@@ -215,7 +215,7 @@ def cargar_sitios_excel():
 # LOGIN
 # ============================================
 
-st.markdown("<div class='main-title'> MARA INGENIEROS S.A.S.</div>", unsafe_allow_html=True)
+st.markdown("<div class='main-title'> Ⓜ MARA INGENIEROS S.A.S.</div>", unsafe_allow_html=True)
 st.markdown("<div class='subtitle'> NIT- 900269969-5  INGENIERÍA DE CALIDAD </div>", unsafe_allow_html=True)
 
 if not st.session_state.autenticado:
