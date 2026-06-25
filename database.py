@@ -108,6 +108,8 @@ class Pago(Base):
     monto = Column(Float, nullable=False)
     concepto = Column(String(50), nullable=True)
     observaciones = Column(Text)
+    # ⬇️ NUEVA COLUMNA PARA ARCHIVO ADJUNTO DEL PAGO
+    archivo_evidencia = Column(String(500), nullable=True)
     created_by = Column(Integer, ForeignKey("usuarios.id"))
     created_at = Column(DateTime, default=datetime.datetime.now)
     updated_at = Column(DateTime, default=datetime.datetime.now, onupdate=datetime.datetime.now)
@@ -123,7 +125,6 @@ class CobroCliente(Base):
     monto = Column(Float, nullable=False)
     fecha = Column(Date, default=datetime.date.today)
     numero_factura = Column(String, nullable=True)
-    concepto = Column(String(50), nullable=True)
     observaciones = Column(Text, nullable=True)
     creado_por = Column(Integer, ForeignKey("usuarios.id"))
     created_at = Column(DateTime, default=datetime.datetime.now)
