@@ -39,21 +39,19 @@ st.markdown("""
     <style>
     /* Sidebar con fondo azul cielo */
     section[data-testid="stSidebar"] {
-        background-color: #E3F2FD;  /* Azul cielo claro */
+        background-color: #E3F2FD;
     }
     section[data-testid="stSidebar"] * {
-        color: #0C2340;  /* Texto oscuro para contraste */
+        color: #0C2340;
     }
-    /* Título de usuario y rol */
     section[data-testid="stSidebar"] .css-1d391kg {
         color: #0C2340 !important;
         font-weight: bold;
     }
-    /* Botón de cerrar sesión */
     section[data-testid="stSidebar"] .stButton button {
-        background-color: #FFFFFF;  /* Fondo blanco */
-        color: #0C2340;             /* Texto oscuro */
-        border: 2px solid #0C2340;  /* Borde azul oscuro */
+        background-color: #FFFFFF;
+        color: #0C2340;
+        border: 2px solid #0C2340;
         border-radius: 8px;
         font-weight: bold;
         padding: 0.5rem 1rem;
@@ -61,11 +59,10 @@ st.markdown("""
         transition: all 0.2s;
     }
     section[data-testid="stSidebar"] .stButton button:hover {
-        background-color: #0C2340;   /* Fondo azul oscuro al pasar mouse */
-        color: #FFFFFF;              /* Texto blanco */
+        background-color: #0C2340;
+        color: #FFFFFF;
         border-color: #0C2340;
     }
-    /* Radio buttons (opciones del menú) */
     section[data-testid="stSidebar"] .stRadio label {
         font-weight: 500;
         padding: 6px 8px;
@@ -73,10 +70,28 @@ st.markdown("""
         transition: background 0.2s;
     }
     section[data-testid="stSidebar"] .stRadio label:hover {
-        background-color: #BBDEFB;   /* Azul más intenso al pasar mouse */
+        background-color: #BBDEFB;
     }
-    /* Ocultar el texto "Navegación" si se desea (opcional) */
-    /* section[data-testid="stSidebar"] .stRadio > div:first-child { display: none; } */
+    /* Compactar contenedores */
+    .block-container {
+        padding-top: 1rem;
+        padding-bottom: 0rem;
+    }
+    /* Estilos para métricas en tarjetas */
+    .card-metrica {
+        background-color: #F0F4F8;
+        padding: 10px 14px;
+        border-radius: 8px;
+        border-left: 4px solid #0056B3;
+        margin-bottom: 8px;
+    }
+    .card-utilidad {
+        background-color: #E2F0D9;
+        padding: 10px 14px;
+        border-radius: 8px;
+        border-left: 4px solid #385723;
+        margin-bottom: 8px;
+    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -84,13 +99,6 @@ st.markdown("""
     <style>
     .main-title { font-size:38px !important; font-weight: bold; color: #0C2340; text-align: center; margin-bottom: 5px; }
     .subtitle { font-size:18px !important; color: #5C768D; text-align: center; margin-bottom: 25px; }
-    .card-metrica { background-color: #F0F4F8; padding: 18px; border-radius: 10px; border-left: 5px solid #0056B3; margin-bottom: 15px; }
-    .card-utilidad { background-color: #E2F0D9; padding: 18px; border-radius: 10px; border-left: 5px solid #385723; margin-bottom: 15px; }
-    .block-container { padding-top: 1rem; padding-bottom: 0rem; }
-    @media (max-width: 768px) {
-        .main-title { font-size: 28px !important; }
-        .stColumns { gap: 0.5rem; }
-    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -177,13 +185,16 @@ def calcular_kpi_proyecto(proyecto_id):
         "rentabilidad": rentabilidad
     }
 
-@st.cache_data
+@st.cache_data(ttl=3600)
 def cargar_sitios_excel():
     ruta_excel = os.path.join(os.getcwd(), "sitios.xlsx")
     if os.path.exists(ruta_excel):
         try:
-            df = pd.read_excel(ruta_excel)
-            df.rename(columns={
+            # 1. Leer todo como string para evitar errores de tipo
+            df = pd.read_excel(ruta_excel, dtype=str, engine='openpyxl')
+            
+            # 2. Renombrar columnas (si existen)
+            renombrar = {
                 "Wom_Site_Code": "codigo",
                 "Site_Name": "nombre",
                 "torrero": "torrero",
@@ -195,15 +206,32 @@ def cargar_sitios_excel():
                 "Municipality": "municipio",
                 "Regional FM&R": "regional",
                 "Tipo de Energía": "tipo_energia"
-            }, inplace=True)
-            df["codigo"] = df["codigo"].astype(str)
-            df["nombre"] = df["nombre"].astype(str)
-            df["torrero"] = df["torrero"].astype(str)
-            df["codigo_torrero"] = df["codigo_torrero"].astype(str)
-            df["latitud"] = pd.to_numeric(df["latitud"], errors="coerce")
-            df["longitud"] = pd.to_numeric(df["longitud"], errors="coerce")
-            df.fillna("", inplace=True)
+            }
+            # Solo renombrar las columnas que realmente existen
+            columnas_existentes = [col for col in renombrar if col in df.columns]
+            df.rename(columns={col: renombrar[col] for col in columnas_existentes}, inplace=True)
+            
+            # 3. Convertir latitud y longitud a número (los errores → NaN)
+            if "latitud" in df.columns:
+                df["latitud"] = pd.to_numeric(df["latitud"], errors='coerce')
+            else:
+                df["latitud"] = 0.0
+            if "longitud" in df.columns:
+                df["longitud"] = pd.to_numeric(df["longitud"], errors='coerce')
+            else:
+                df["longitud"] = 0.0
+            
+            # 4. Asegurar que las columnas de texto sean string y rellenar NaN
+            columnas_texto = ["codigo", "nombre", "torrero", "codigo_torrero", 
+                              "direccion", "departamento", "municipio", "regional", "tipo_energia"]
+            for col in columnas_texto:
+                if col in df.columns:
+                    df[col] = df[col].astype(str).fillna("")
+                else:
+                    df[col] = ""  # si no existe, crear columna vacía
+            
             return df
+            
         except Exception as e:
             st.error(f"Error al cargar sitios.xlsx: {e}")
             return pd.DataFrame()
@@ -215,8 +243,8 @@ def cargar_sitios_excel():
 # LOGIN
 # ============================================
 
-st.markdown("<div class='main-title'> Ⓜ MARA INGENIEROS S.A.S.</div>", unsafe_allow_html=True)
-st.markdown("<div class='subtitle'> NIT- 900269969-5  INGENIERÍA DE CALIDAD </div>", unsafe_allow_html=True)
+st.markdown("<div class='main-title'> MARA INGENIEROS S.A.S.</div>", unsafe_allow_html=True)
+st.markdown("<div class='subtitle'>NIT. 901269969-5 Ingeniería de calidad </div>", unsafe_allow_html=True)
 
 if not st.session_state.autenticado:
     st.markdown("---")
@@ -225,7 +253,7 @@ if not st.session_state.autenticado:
         st.markdown("### 🔑 Ingreso al Sistema")
         u = st.text_input("Usuario")
         p = st.text_input("Contraseña", type="password")
-        if st.button(" Iniciar Sesión", use_container_width=True):
+        if st.button("🚀 Iniciar Sesión", use_container_width=True):
             p_hash = encriptar_password(p)
             user = db.query(Usuario).filter(Usuario.nombre == u).first()
             if user and (user.password_hash == p_hash or user.password_hash == p):
@@ -244,13 +272,11 @@ if not st.session_state.autenticado:
 st.sidebar.title(f"👤 {st.session_state.usuario_actual.upper()}")
 st.sidebar.markdown(f"**Rol:** `{st.session_state.rol_actual}`")
 
-# Botón de cerrar sesión (con estilo mejorado)
 if st.sidebar.button("🔒 Cerrar Sesión", use_container_width=True):
     cerrar_sesion()
 
-st.sidebar.markdown("---")  # Separador visual
+st.sidebar.markdown("---")
 
-# Definir opciones según rol
 rol = st.session_state.rol_actual
 if rol == "Operario":
     opciones_base = ["Proyectos", "Partidas Presupuesto", "Gastos", "Pagos", "Proveedores", "Reportes"]
@@ -259,7 +285,6 @@ elif rol == "Auxiliar Contable":
 else:  # Gerencia
     opciones_base = ["Proyectos", "Partidas Presupuesto", "Gastos", "Pagos", "Proveedores", "Conciliación", "Reportes", "Dashboard", "Usuarios"]
 
-# Diccionario de íconos
 iconos = {
     "Proyectos": "🏗️",
     "Partidas Presupuesto": "📋",
@@ -272,16 +297,15 @@ iconos = {
     "Usuarios": "👥"
 }
 
-# Función para mostrar opción con ícono
 def opcion_con_icono(opcion):
     return f"{iconos.get(opcion, '')} {opcion}"
 
-# Menú de navegación
 menu = st.sidebar.radio(
     "Navegación",
     opciones_base,
     format_func=opcion_con_icono
 )
+
 # ============================================
 # FUNCIONES DE CADA MÓDULO
 # ============================================
@@ -575,99 +599,148 @@ def pagina_proyectos():
     # Formulario nuevo proyecto
     with st.expander("➕ Nuevo Proyecto", expanded=False):
         df_sitios = cargar_sitios_excel()
+
+        # --- Inicializar estado de sesión ---
         if "sitio_seleccionado" not in st.session_state:
             st.session_state.sitio_seleccionado = None
+        if "nuevo_proy_cliente" not in st.session_state:
+            st.session_state.nuevo_proy_cliente = "WOM"
 
-        with st.form("nuevo_proyecto"):
-            cliente = st.text_input("Cliente", "WOM")
-            
-            if "WOM" in cliente.upper():
-                st.markdown("#### 🏢 Buscar sitio en base de datos")
-                if not df_sitios.empty:
-                    busqueda = st.text_input(
-                        "🔍 Buscar por código o nombre",
-                        placeholder="Ej: JGUA_00024 o Cuatro Vias",
-                        key="busqueda_sitio"
-                    )
-                    
-                    if busqueda:
-                        filtro = df_sitios[
-                            df_sitios["codigo"].str.contains(busqueda, case=False, na=False) |
-                            df_sitios["nombre"].str.contains(busqueda, case=False, na=False)
-                        ]
-                    else:
-                        filtro = df_sitios.head(100)
-                    
-                    if not filtro.empty:
-                        opciones = filtro.apply(
-                            lambda row: f"{row['codigo']} - {row['nombre']}", axis=1
-                        ).tolist()
-                        opciones.insert(0, "Seleccione un sitio...")
-                        
-                        seleccion = st.selectbox(
-                            "Seleccione un sitio",
-                            options=opciones,
-                            index=0,
-                            key="selector_sitio"
-                        )
-                        
-                        if seleccion != "Seleccione un sitio...":
-                            codigo_seleccionado = seleccion.split(" - ")[0]
-                            sitio = df_sitios[df_sitios["codigo"] == codigo_seleccionado].iloc[0]
-                            st.session_state.sitio_seleccionado = sitio
-                            st.success(f"✅ Sitio seleccionado: **{sitio['nombre']}**")
-                        else:
-                            st.session_state.sitio_seleccionado = None
-                    else:
-                        st.info("No se encontraron sitios con esa búsqueda.")
+        # =====================================================
+        # BLOQUE 1: BÚSQUEDA Y SELECCIÓN DEL SITIO WOM
+        # Fuera del form para permitir reactividad dinámica.
+        # =====================================================
+        cliente_externo = st.text_input(
+            "Cliente",
+            value=st.session_state.nuevo_proy_cliente,
+            key="nuevo_proy_cliente_input"
+        )
+        # Sincronizar cliente en session_state
+        if cliente_externo != st.session_state.nuevo_proy_cliente:
+            st.session_state.nuevo_proy_cliente = cliente_externo
+            st.session_state.sitio_seleccionado = None
+            st.rerun()
+
+        if "WOM" in cliente_externo.upper():
+            st.markdown("#### 🏢 Buscar sitio en base de datos WOM")
+            if not df_sitios.empty:
+                busqueda = st.text_input(
+                    "🔍 Buscar por código o nombre",
+                    placeholder="Ej: JGUA o Cuatro Vias",
+                    key="busqueda_sitio_wom"
+                )
+
+                if busqueda:
+                    filtro = df_sitios[
+                        df_sitios["codigo"].str.contains(busqueda, case=False, na=False) |
+                        df_sitios["nombre"].str.contains(busqueda, case=False, na=False)
+                    ]
                 else:
-                    st.warning("No se pudo cargar la base de datos de sitios.")
+                    filtro = df_sitios.head(100)
+
+                if not filtro.empty:
+                    opciones = ["Seleccione un sitio..."] + filtro.apply(
+                        lambda row: f"{row['codigo']} - {row['nombre']}", axis=1
+                    ).tolist()
+
+                    seleccion = st.selectbox(
+                        "Seleccione un sitio",
+                        options=opciones,
+                        index=0,
+                        key="selector_sitio_wom"
+                    )
+
+                    if seleccion != "Seleccione un sitio...":
+                        codigo_seleccionado = seleccion.split(" - ")[0]
+                        sitio_df = df_sitios[df_sitios["codigo"] == codigo_seleccionado]
+                        if not sitio_df.empty:
+                            st.session_state.sitio_seleccionado = sitio_df.iloc[0]
+                            sitio = st.session_state.sitio_seleccionado
+                            st.success(f"✅ Sitio seleccionado: **{sitio['nombre']}**")
+                            col_i1, col_i2, col_i3 = st.columns(3)
+                            col_i1.caption(f"📍 **Municipio:** {sitio.get('municipio', 'N/A')}")
+                            col_i2.caption(f"🗺️ **Departamento:** {sitio.get('departamento', 'N/A')}")
+                            col_i3.caption(f"⚡ **Energía:** {sitio.get('tipo_energia', 'N/A')}")
+                            col_i4, col_i5 = st.columns(2)
+                            col_i4.caption(f"🏗️ **Torrero:** {sitio.get('torrero', 'N/A')}")
+                            col_i5.caption(f"🔢 **Cód. Torrero:** {sitio.get('codigo_torrero', 'N/A')}")
+                    else:
+                        st.session_state.sitio_seleccionado = None
+                else:
+                    st.info("No se encontraron sitios con esa búsqueda.")
+                    st.session_state.sitio_seleccionado = None
             else:
+                st.warning("No se pudo cargar la base de datos de sitios.")
                 st.session_state.sitio_seleccionado = None
+        else:
+            st.session_state.sitio_seleccionado = None
 
-            if st.session_state.sitio_seleccionado is not None:
-                sitio = st.session_state.sitio_seleccionado
-                nombre_default = sitio.get("nombre", "")
-                ubicacion_default = f"{sitio.get('direccion', '')} {sitio.get('municipio', '')} {sitio.get('departamento', '')}".strip()
-                latitud_default = float(sitio.get("latitud", 0.0))
-                longitud_default = float(sitio.get("longitud", 0.0))
-            else:
-                nombre_default = ""
-                ubicacion_default = "Colombia"
-                latitud_default = 0.0
-                longitud_default = 0.0
+        # Calcular valores por defecto ANTES del formulario
+        if st.session_state.sitio_seleccionado is not None:
+            sitio = st.session_state.sitio_seleccionado
+            nombre_default = str(sitio.get("nombre", ""))
+            ubicacion_default = " ".join(filter(None, [
+                str(sitio.get("direccion", "")),
+                str(sitio.get("municipio", "")),
+                str(sitio.get("departamento", ""))
+            ])).strip() or "Colombia"
+            lat_raw = sitio.get("latitud", 0.0)
+            lon_raw = sitio.get("longitud", 0.0)
+            latitud_default = float(lat_raw) if lat_raw and str(lat_raw) not in ("", "nan") else 0.0
+            longitud_default = float(lon_raw) if lon_raw and str(lon_raw) not in ("", "nan") else 0.0
+            codigo_wom_default = str(sitio.get("codigo", ""))
+            regional_default = str(sitio.get("regional", ""))
+        else:
+            nombre_default = ""
+            ubicacion_default = "Colombia"
+            latitud_default = 0.0
+            longitud_default = 0.0
+            codigo_wom_default = ""
+            regional_default = ""
 
+        st.markdown("---")
+
+        # =====================================================
+        # BLOQUE 2: FORMULARIO FINAL DE CAPTURA Y GUARDADO
+        # Solo contiene campos editables y el botón guardar.
+        # =====================================================
+        with st.form("nuevo_proyecto"):
+            st.markdown("#### 📝 Datos del Proyecto")
             nombre = st.text_input("Nombre del Proyecto/Sitio", value=nombre_default)
             ubicacion = st.text_input("Ubicación", value=ubicacion_default)
             n_requerimiento = st.text_input("N° de Requerimiento", "Mara_0001")
             acta = st.text_input("Acta de Conciliación", "SIN CONCILIAR")
             estado = st.selectbox("Estado", ["Activo", "Finalizado"])
-            latitud = st.number_input("Latitud (opcional)", value=latitud_default, format="%.6f", step=0.000001)
-            longitud = st.number_input("Longitud (opcional)", value=longitud_default, format="%.6f", step=0.000001)
 
-            if st.session_state.sitio_seleccionado is not None:
-                sitio = st.session_state.sitio_seleccionado
-                st.caption(f"**Torrero:** {sitio.get('torrero', 'N/A')} | **Código Torre:** {sitio.get('codigo_torrero', 'N/A')}")
+            col_lat, col_lon = st.columns(2)
+            with col_lat:
+                latitud = st.number_input("Latitud (opcional)", value=latitud_default, format="%.6f", step=0.000001)
+            with col_lon:
+                longitud = st.number_input("Longitud (opcional)", value=longitud_default, format="%.6f", step=0.000001)
 
-            submitted = st.form_submit_button("Crear Proyecto")
-            if submitted and nombre:
-                nuevo = Proyecto(
-                    nombre=nombre,
-                    ubicacion=ubicacion,
-                    cliente=cliente,
-                    n_requerimiento=n_requerimiento,
-                    acta_conciliacion=acta,
-                    estado=estado,
-                    created_by=usuario.id,
-                    latitud=latitud if latitud != 0.0 else None,
-                    longitud=longitud if longitud != 0.0 else None
-                )
-                db.add(nuevo)
-                db.commit()
-                registrar_auditoria("Proyecto", nuevo.id, "insert", usuario.id)
-                st.success("Proyecto creado exitosamente")
-                st.session_state.sitio_seleccionado = None
-                st.rerun()
+            submitted = st.form_submit_button("💾 Crear Proyecto", type="primary")
+            if submitted:
+                if not nombre.strip():
+                    st.error("❌ El nombre del proyecto es obligatorio.")
+                else:
+                    nuevo = Proyecto(
+                        nombre=nombre,
+                        ubicacion=ubicacion,
+                        cliente=cliente_externo,
+                        n_requerimiento=n_requerimiento,
+                        acta_conciliacion=acta,
+                        estado=estado,
+                        created_by=usuario.id,
+                        latitud=latitud if latitud != 0.0 else None,
+                        longitud=longitud if longitud != 0.0 else None
+                    )
+                    db.add(nuevo)
+                    db.commit()
+                    registrar_auditoria("Proyecto", nuevo.id, "insert", usuario.id)
+                    st.success("✅ Proyecto creado exitosamente")
+                    st.session_state.sitio_seleccionado = None
+                    st.session_state.nuevo_proy_cliente = "WOM"
+                    st.rerun()
 
     # Filtros y listado
     st.markdown("### 🔍 Buscar Proyectos")
@@ -726,58 +799,61 @@ def pagina_proyectos():
         for p in proyectos:
             kpi = calcular_kpi_proyecto(p.id)
             
+            # Tarjeta en una sola línea
             with st.container(border=True):
-                col_info1, col_info2, col_info3, col_info4 = st.columns([3, 1.5, 1.5, 1])
-                with col_info1:
+                # Una sola fila de columnas: información + métricas + botones
+                cols = st.columns([2.2, 1.2, 1.2, 1.0, 0.5, 0.5, 0.5, 0.5])
+                with cols[0]:
                     st.markdown(f"""
                     <div style="font-size:14px; font-weight:bold; color:#0C2340;">
                         {p.nombre}
                     </div>
-                    <div style="font-size:13px; color:#5C768D;">
+                    <div style="font-size:12px; color:#5C768D;">
                         {p.ubicacion} · {p.cliente} · {p.estado}
                     </div>
                     """, unsafe_allow_html=True)
-                with col_info2:
-                    st.markdown(f"<div style='font-size:14px;'><b>Ingresos:</b> ${kpi['ingresos']:,.0f}</div>", unsafe_allow_html=True)
-                with col_info3:
-                    st.markdown(f"<div style='font-size:14px;'><b>Costos:</b> ${kpi['costos']:,.0f}</div>", unsafe_allow_html=True)
-                with col_info4:
+                with cols[1]:
+                    st.markdown(f"<div style='font-size:13px;'><b>Ingresos:</b> ${kpi['ingresos']:,.0f}</div>", unsafe_allow_html=True)
+                with cols[2]:
+                    st.markdown(f"<div style='font-size:13px;'><b>Costos:</b> ${kpi['costos']:,.0f}</div>", unsafe_allow_html=True)
+                with cols[3]:
                     color = "green" if kpi['rentabilidad'] >= 20 else "orange" if kpi['rentabilidad'] >= 10 else "red"
-                    st.markdown(f"<div style='font-size:14px;'><b>Rentabilidad:</b> <span style='color:{color};'>{kpi['rentabilidad']:.1f}%</span></div>", unsafe_allow_html=True)
-
-                col_btn1, col_btn2, col_btn3, col_btn4, col_btn5 = st.columns([1, 1, 1, 1, 2])
-                with col_btn1:
+                    st.markdown(f"<div style='font-size:13px;'><b>Rent:</b> <span style='color:{color};'>{kpi['rentabilidad']:.1f}%</span></div>", unsafe_allow_html=True)
+                
+                # Botones con emojis
+                with cols[4]:
                     if st.session_state.rol_actual in ["Gerencia", "Auxiliar Contable"]:
-                        if st.button("✏️ Editar", key=f"edit_{p.id}", use_container_width=True):
+                        if st.button("✏️", key=f"edit_{p.id}", help="Editar"):
                             st.session_state.proyecto_editar = p.id
                             st.rerun()
-                with col_btn2:
+                with cols[5]:
                     if st.session_state.rol_actual in ["Gerencia", "Auxiliar Contable"]:
-                        if st.button("🗑️ Eliminar", key=f"delete_{p.id}", use_container_width=True):
+                        # Popover para confirmar eliminación
+                        with st.popover("🗑️", help="Eliminar"):
+                            st.warning(f"¿Eliminar proyecto '{p.nombre}'?")
                             partidas = db.query(PartidaPresupuesto).filter(PartidaPresupuesto.proyecto_id == p.id).count()
                             gastos = db.query(Gasto).filter(Gasto.proyecto_id == p.id).count()
                             if partidas > 0 or gastos > 0:
-                                st.error(f"No se puede eliminar porque tiene {partidas} partidas y {gastos} gastos asociados.")
+                                st.error(f"Tiene {partidas} partidas y {gastos} gastos asociados. No se puede eliminar.")
                             else:
-                                if st.button(f"Confirmar", key=f"confirm_delete_{p.id}"):
+                                if st.button("✅ Confirmar Eliminación", key=f"confirm_delete_{p.id}"):
                                     db.delete(p)
                                     db.commit()
                                     registrar_auditoria("Proyecto", p.id, "delete", usuario.id)
                                     st.success(f"Proyecto {p.nombre} eliminado")
                                     st.rerun()
-                with col_btn3:
+                with cols[6]:
                     if p.latitud and p.longitud:
                         maps_url = f"https://www.google.com/maps?q={p.latitud},{p.longitud}"
-                        st.link_button("🗺️ Mapa", maps_url, use_container_width=True)
+                        st.link_button("🗺️", maps_url, help="Ver en mapa")
                     else:
-                        st.write("")
-                with col_btn4:
-                    if st.button(f"📊 Detalle", key=f"btn_detalle_{p.id}", use_container_width=True):
+                        st.write("")  # placeholder
+                with cols[7]:
+                    if st.button("📊", key=f"btn_detalle_{p.id}", help="Ver detalle"):
                         st.session_state[f"show_detail_{p.id}"] = not st.session_state.get(f"show_detail_{p.id}", False)
                         st.rerun()
-                with col_btn5:
-                    st.write("")
                 
+                # Edición en línea (se abre debajo si está activo)
                 if "proyecto_editar" in st.session_state and st.session_state.proyecto_editar == p.id:
                     with st.form(f"edit_proy_{p.id}"):
                         nuevo_nombre = st.text_input("Nombre", value=p.nombre)
@@ -818,6 +894,7 @@ def pagina_proyectos():
                                 del st.session_state.proyecto_editar
                                 st.rerun()
                 
+                # Detalle (expandible)
                 if st.session_state.get(f"show_detail_{p.id}", False):
                     st.markdown("---")
                     st.markdown(f"### 📊 Detalle Financiero - {p.nombre}")
@@ -931,25 +1008,27 @@ def pagina_partidas():
         
         if partidas:
             st.markdown("### Lista de Partidas")
+            # Tabla compacta con botones
             for idx, partida in enumerate(partidas):
-                col1, col2, col3, col4, col5, col6 = st.columns([2, 2, 1, 1, 1, 0.5])
-                col1.write(partida.categoria)
-                col2.write(partida.descripcion)
-                col3.write(partida.cantidad)
-                col4.write(f"${partida.valor_unitario:,.0f}")
-                col5.write(f"${partida.total:,.0f}")
-                with col6:
+                cols = st.columns([1.8, 1.8, 0.8, 0.8, 0.8, 0.4])
+                cols[0].write(partida.categoria)
+                cols[1].write(partida.descripcion)
+                cols[2].write(str(partida.cantidad))
+                cols[3].write(f"${partida.valor_unitario:,.0f}")
+                cols[4].write(f"${partida.total:,.0f}")
+                with cols[5]:
                     if st.session_state.rol_actual in ["Gerencia", "Auxiliar Contable"]:
-                        if st.button("🗑️", key=f"del_partida_{partida.id}"):
+                        with st.popover("🗑️", help="Eliminar partida"):
                             cobros = db.query(CobroCliente).filter(CobroCliente.partida_id == partida.id).count()
                             if cobros > 0:
-                                st.error(f"No se puede eliminar porque tiene {cobros} cobros asociados.")
+                                st.error(f"Tiene {cobros} cobros asociados. No se puede eliminar.")
                             else:
-                                db.delete(partida)
-                                db.commit()
-                                registrar_auditoria("PartidaPresupuesto", partida.id, "delete", usuario.id)
-                                st.success("Partida eliminada")
-                                st.rerun()
+                                if st.button("✅ Confirmar", key=f"del_partida_{partida.id}"):
+                                    db.delete(partida)
+                                    db.commit()
+                                    registrar_auditoria("PartidaPresupuesto", partida.id, "delete", usuario.id)
+                                    st.success("Partida eliminada")
+                                    st.rerun()
             
             total_pres = sum(p.total for p in partidas)
             st.metric("Total Ingresos Presupuestados", f"${total_pres:,.0f}")
@@ -1078,23 +1157,24 @@ def pagina_gastos():
         else:
             for g, pagado, saldo in gastos_filtrados:
                 with st.container(border=True):
-                    col1, col2, col3, col4 = st.columns([3, 1, 1, 0.5])
+                    cols = st.columns([2.5, 1.2, 1.2, 0.4])
                     proveedor = db.query(Proveedor).filter(Proveedor.id == g.proveedor_id).first()
-                    col1.markdown(f"**{g.concepto}**  \n*{g.categoria}*  \nProveedor: {proveedor.nombre if proveedor else 'N/A'}")
-                    col2.metric("Total", f"${g.valor_total:,.0f}")
-                    col3.metric("Saldo", f"${saldo:,.0f}")
-                    with col4:
+                    cols[0].markdown(f"**{g.concepto}**  \n*{g.categoria}*  \nProveedor: {proveedor.nombre if proveedor else 'N/A'}")
+                    cols[1].metric("Total", f"${g.valor_total:,.0f}")
+                    cols[2].metric("Saldo", f"${saldo:,.0f}")
+                    with cols[3]:
                         if st.session_state.rol_actual in ["Gerencia", "Auxiliar Contable"]:
-                            if st.button("🗑️", key=f"del_gasto_{g.id}"):
+                            with st.popover("🗑️", help="Eliminar gasto"):
                                 pagos_asociados = db.query(Pago).filter(Pago.gasto_id == g.id).count()
                                 if pagos_asociados > 0:
-                                    st.error(f"No se puede eliminar porque tiene {pagos_asociados} pagos asociados.")
+                                    st.error(f"Tiene {pagos_asociados} pagos asociados. No se puede eliminar.")
                                 else:
-                                    db.delete(g)
-                                    db.commit()
-                                    registrar_auditoria("Gasto", g.id, "delete", usuario.id)
-                                    st.success("Gasto eliminado")
-                                    st.rerun()
+                                    if st.button("✅ Confirmar", key=f"del_gasto_{g.id}"):
+                                        db.delete(g)
+                                        db.commit()
+                                        registrar_auditoria("Gasto", g.id, "delete", usuario.id)
+                                        st.success("Gasto eliminado")
+                                        st.rerun()
                     
                     if saldo > 0:
                         with st.expander(f"💳 Registrar Pago - {g.concepto[:50]} (Saldo: ${saldo:,.0f})"):
@@ -1256,34 +1336,37 @@ def pagina_pagos():
         if not gastos:
             st.info("No hay gastos que coincidan con los filtros para este proyecto.")
         else:
+            total_pagado_general = 0
             for gasto in gastos:
                 pagos = db.query(Pago).filter(Pago.gasto_id == gasto.id).all()
                 total_pagado = sum(p.monto for p in pagos)
+                total_pagado_general += total_pagado
                 saldo = gasto.valor_total - total_pagado
                 with st.container(border=True):
-                    col1, col2, col3 = st.columns([2, 1, 1])
-                    col1.markdown(f"**{gasto.concepto}**  \nProveedor: {db.query(Proveedor).filter(Proveedor.id == gasto.proveedor_id).first().nombre if gasto.proveedor_id else 'N/A'}")
-                    col2.metric("Total Gasto", f"${gasto.valor_total:,.0f}")
-                    col3.metric("Saldo Pendiente", f"${saldo:,.0f}")
+                    cols = st.columns([2, 1, 1])
+                    cols[0].markdown(f"**{gasto.concepto}**  \nProveedor: {db.query(Proveedor).filter(Proveedor.id == gasto.proveedor_id).first().nombre if gasto.proveedor_id else 'N/A'}")
+                    cols[1].metric("Total Gasto", f"${gasto.valor_total:,.0f}")
+                    cols[2].metric("Saldo Pendiente", f"${saldo:,.0f}")
                     
                     # Mostrar pagos existentes
                     if pagos:
                         st.markdown("**Pagos registrados:**")
                         for pago in pagos:
-                            col_p1, col_p2, col_p3, col_p4, col_p5, col_p6 = st.columns([1.2, 1.2, 1.2, 1.2, 1.5, 0.5])
-                            col_p1.write(pago.fecha.strftime("%Y-%m-%d"))
-                            col_p2.write(pago.tipo)
-                            col_p3.write(pago.concepto or "")  # Nuevo campo
-                            col_p4.write(f"${pago.monto:,.0f}")
-                            col_p5.write(pago.numero_factura or "")
-                            with col_p6:
+                            cols_p = st.columns([1.2, 1.2, 1.2, 1.2, 1.5, 0.4])
+                            cols_p[0].write(pago.fecha.strftime("%Y-%m-%d"))
+                            cols_p[1].write(pago.tipo)
+                            cols_p[2].write(pago.concepto or "")
+                            cols_p[3].write(f"${pago.monto:,.0f}")
+                            cols_p[4].write(pago.numero_factura or "")
+                            with cols_p[5]:
                                 if st.session_state.rol_actual in ["Gerencia", "Auxiliar Contable"]:
-                                    if st.button("🗑️", key=f"del_pago_{pago.id}"):
-                                        db.delete(pago)
-                                        db.commit()
-                                        registrar_auditoria("Pago", pago.id, "delete", usuario.id)
-                                        st.success("Pago eliminado")
-                                        st.rerun()
+                                    with st.popover("🗑️", help="Eliminar pago"):
+                                        if st.button("✅ Confirmar", key=f"del_pago_{pago.id}"):
+                                            db.delete(pago)
+                                            db.commit()
+                                            registrar_auditoria("Pago", pago.id, "delete", usuario.id)
+                                            st.success("Pago eliminado")
+                                            st.rerun()
                     
                     if saldo > 0:
                         with st.expander("Registrar Pago"):
@@ -1299,7 +1382,7 @@ def pagina_pagos():
                                     nuevo_pago = Pago(
                                         gasto_id=gasto.id,
                                         tipo=tipo,
-                                        concepto=concepto,          # Nuevo campo
+                                        concepto=concepto,
                                         numero_factura=n_factura,
                                         fecha=fecha,
                                         monto=monto,
@@ -1321,6 +1404,8 @@ def pagina_pagos():
                                     st.rerun()
                     else:
                         st.success("✅ Gasto totalmente pagado")
+            # Total general de pagos
+            st.metric("💵 Total Pagado en este Proyecto", f"${total_pagado_general:,.0f}")
 
 def pagina_proveedores():
     st.markdown("## 🏢 Gestión de Proveedores")
@@ -1331,23 +1416,24 @@ def pagina_proveedores():
     if proveedores:
         st.markdown("### Lista de Proveedores")
         for idx, proveedor in enumerate(proveedores):
-            col1, col2, col3, col4, col5 = st.columns([2, 1.5, 1.5, 1.5, 0.5])
-            col1.write(proveedor.nombre)
-            col2.write(proveedor.nit or "")
-            col3.write(proveedor.contacto or "")
-            col4.write(proveedor.telefono or "")
-            with col5:
+            cols = st.columns([2, 1.5, 1.5, 1.5, 0.4])
+            cols[0].write(proveedor.nombre)
+            cols[1].write(proveedor.nit or "")
+            cols[2].write(proveedor.contacto or "")
+            cols[3].write(proveedor.telefono or "")
+            with cols[4]:
                 if st.session_state.rol_actual in ["Gerencia", "Auxiliar Contable"]:
-                    if st.button("🗑️", key=f"del_prov_{proveedor.id}"):
+                    with st.popover("🗑️", help="Eliminar proveedor"):
                         gastos = db.query(Gasto).filter(Gasto.proveedor_id == proveedor.id).count()
                         if gastos > 0:
-                            st.error(f"No se puede eliminar porque tiene {gastos} gastos asociados.")
+                            st.error(f"Tiene {gastos} gastos asociados. No se puede eliminar.")
                         else:
-                            db.delete(proveedor)
-                            db.commit()
-                            registrar_auditoria("Proveedor", proveedor.id, "delete", usuario.id)
-                            st.success("Proveedor eliminado")
-                            st.rerun()
+                            if st.button("✅ Confirmar", key=f"del_prov_{proveedor.id}"):
+                                db.delete(proveedor)
+                                db.commit()
+                                registrar_auditoria("Proveedor", proveedor.id, "delete", usuario.id)
+                                st.success("Proveedor eliminado")
+                                st.rerun()
     else:
         st.info("No hay proveedores registrados")
 
