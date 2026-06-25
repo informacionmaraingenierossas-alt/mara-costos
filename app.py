@@ -10,7 +10,7 @@ import os
 import datetime
 import hashlib
 import json
-from sqlalchemy import func, desc
+from sqlalchemy import func, desc, text
 import plotly.express as px
 import plotly.graph_objects as go
 
@@ -19,6 +19,20 @@ import plotly.graph_objects as go
 # ============================================
 
 Base.metadata.create_all(bind=engine)
+
+# Agregar columna archivo_evidencia a la tabla pagos si no existe
+try:
+    with engine.connect() as conn:
+        result = conn.execute(text(
+            "SELECT column_name FROM information_schema.columns "
+            "WHERE table_name='pagos' AND column_name='archivo_evidencia'"
+        ))
+        if not result.fetchone():
+            conn.execute(text("ALTER TABLE pagos ADD COLUMN archivo_evidencia VARCHAR(500)"))
+            conn.commit()
+except Exception as e:
+    # Si no se puede (ej. SQLite), se ignora
+    pass
 
 def encriptar_password(password: str) -> str:
     return hashlib.sha256(password.encode()).hexdigest()
@@ -37,7 +51,6 @@ st.set_page_config(page_title="MARA INGENIEROS - Control de Costos", layout="wid
 # Estilos personalizados
 st.markdown("""
     <style>
-    /* Sidebar con fondo azul cielo */
     section[data-testid="stSidebar"] {
         background-color: #E3F2FD;
     }
@@ -72,12 +85,10 @@ st.markdown("""
     section[data-testid="stSidebar"] .stRadio label:hover {
         background-color: #BBDEFB;
     }
-    /* Compactar contenedores */
     .block-container {
         padding-top: 1rem;
         padding-bottom: 0rem;
     }
-    /* Estilos para métricas en tarjetas */
     .card-metrica {
         background-color: #F0F4F8;
         padding: 10px 14px;
@@ -92,11 +103,6 @@ st.markdown("""
         border-left: 4px solid #385723;
         margin-bottom: 8px;
     }
-    </style>
-""", unsafe_allow_html=True)
-
-st.markdown("""
-    <style>
     .main-title { font-size:38px !important; font-weight: bold; color: #0C2340; text-align: center; margin-bottom: 5px; }
     .subtitle { font-size:18px !important; color: #5C768D; text-align: center; margin-bottom: 25px; }
     </style>
@@ -108,6 +114,7 @@ if "autenticado" not in st.session_state:
     st.session_state.carrito = []
     st.session_state.partidas_temp = []
     st.session_state.pago_abierto = None
+    st.session_state.gastos_show_pagos = {}  # dict para controlar despliegue de pagos
 
 def cerrar_sesion():
     st.session_state.autenticado = False
@@ -190,10 +197,7 @@ def cargar_sitios_excel():
     ruta_excel = os.path.join(os.getcwd(), "sitios.xlsx")
     if os.path.exists(ruta_excel):
         try:
-            # 1. Leer todo como string para evitar errores de tipo
             df = pd.read_excel(ruta_excel, dtype=str, engine='openpyxl')
-            
-            # 2. Renombrar columnas (si existen)
             renombrar = {
                 "Wom_Site_Code": "codigo",
                 "Site_Name": "nombre",
@@ -207,11 +211,8 @@ def cargar_sitios_excel():
                 "Regional FM&R": "regional",
                 "Tipo de Energía": "tipo_energia"
             }
-            # Solo renombrar las columnas que realmente existen
             columnas_existentes = [col for col in renombrar if col in df.columns]
             df.rename(columns={col: renombrar[col] for col in columnas_existentes}, inplace=True)
-            
-            # 3. Convertir latitud y longitud a número (los errores → NaN)
             if "latitud" in df.columns:
                 df["latitud"] = pd.to_numeric(df["latitud"], errors='coerce')
             else:
@@ -220,18 +221,14 @@ def cargar_sitios_excel():
                 df["longitud"] = pd.to_numeric(df["longitud"], errors='coerce')
             else:
                 df["longitud"] = 0.0
-            
-            # 4. Asegurar que las columnas de texto sean string y rellenar NaN
             columnas_texto = ["codigo", "nombre", "torrero", "codigo_torrero", 
                               "direccion", "departamento", "municipio", "regional", "tipo_energia"]
             for col in columnas_texto:
                 if col in df.columns:
                     df[col] = df[col].astype(str).fillna("")
                 else:
-                    df[col] = ""  # si no existe, crear columna vacía
-            
+                    df[col] = ""
             return df
-            
         except Exception as e:
             st.error(f"Error al cargar sitios.xlsx: {e}")
             return pd.DataFrame()
@@ -596,35 +593,23 @@ def pagina_proyectos():
     st.markdown("---")
     usuario = get_usuario_actual()
     
-    # Formulario nuevo proyecto
     with st.expander("➕ Nuevo Proyecto", expanded=False):
         df_sitios = cargar_sitios_excel()
 
-        # --- Inicializar estado de sesión ---
         if "sitio_seleccionado" not in st.session_state:
             st.session_state.sitio_seleccionado = None
         if "nuevo_proy_cliente" not in st.session_state:
             st.session_state.nuevo_proy_cliente = "WOM"
 
-        # =====================================================
-        # BLOQUE 1: SELECCIÓN DE CLIENTE Y BÚSQUEDA DE SITIO (si aplica)
-        # Fuera del form para permitir reactividad dinámica.
-        # =====================================================
-        opciones_clientes = ["WOM", "HUAWEI WOM", "UNIRED", "TELEFONICA", "OTROS"]
-        cliente_seleccionado = st.selectbox(
+        cliente_externo = st.text_input(
             "Cliente",
-            options=opciones_clientes,
-            index=opciones_clientes.index(st.session_state.nuevo_proy_cliente) 
-                  if st.session_state.nuevo_proy_cliente in opciones_clientes else 0,
-            key="nuevo_proy_cliente_select"
+            value=st.session_state.nuevo_proy_cliente,
+            key="nuevo_proy_cliente_input"
         )
-        # Sincronizar session_state y reiniciar sitio si cambia el cliente
-        if cliente_seleccionado != st.session_state.nuevo_proy_cliente:
-            st.session_state.nuevo_proy_cliente = cliente_seleccionado
+        if cliente_externo != st.session_state.nuevo_proy_cliente:
+            st.session_state.nuevo_proy_cliente = cliente_externo
             st.session_state.sitio_seleccionado = None
             st.rerun()
-
-        cliente_externo = cliente_seleccionado  # usaremos esta variable para el resto
 
         if "WOM" in cliente_externo.upper():
             st.markdown("#### 🏢 Buscar sitio en base de datos WOM")
@@ -680,7 +665,6 @@ def pagina_proyectos():
         else:
             st.session_state.sitio_seleccionado = None
 
-        # Calcular valores por defecto ANTES del formulario
         if st.session_state.sitio_seleccionado is not None:
             sitio = st.session_state.sitio_seleccionado
             nombre_default = str(sitio.get("nombre", ""))
@@ -705,9 +689,6 @@ def pagina_proyectos():
 
         st.markdown("---")
 
-        # =====================================================
-        # BLOQUE 2: FORMULARIO FINAL DE CAPTURA Y GUARDADO
-        # =====================================================
         with st.form("nuevo_proyecto"):
             st.markdown("#### 📝 Datos del Proyecto")
             nombre = st.text_input("Nombre del Proyecto/Sitio", value=nombre_default)
@@ -730,7 +711,7 @@ def pagina_proyectos():
                     nuevo = Proyecto(
                         nombre=nombre,
                         ubicacion=ubicacion,
-                        cliente=cliente_externo,  # usa el cliente seleccionado
+                        cliente=cliente_externo,
                         n_requerimiento=n_requerimiento,
                         acta_conciliacion=acta,
                         estado=estado,
@@ -746,7 +727,6 @@ def pagina_proyectos():
                     st.session_state.nuevo_proy_cliente = "WOM"
                     st.rerun()
 
-    # Filtros y listado
     st.markdown("### 🔍 Buscar Proyectos")
     
     col_search1, col_search2 = st.columns([3, 1])
@@ -803,9 +783,7 @@ def pagina_proyectos():
         for p in proyectos:
             kpi = calcular_kpi_proyecto(p.id)
             
-            # Tarjeta en una sola línea
             with st.container(border=True):
-                # Una sola fila de columnas: información + métricas + botones
                 cols = st.columns([2.2, 1.2, 1.2, 1.0, 0.5, 0.5, 0.5, 0.5])
                 with cols[0]:
                     st.markdown(f"""
@@ -824,7 +802,6 @@ def pagina_proyectos():
                     color = "green" if kpi['rentabilidad'] >= 20 else "orange" if kpi['rentabilidad'] >= 10 else "red"
                     st.markdown(f"<div style='font-size:13px;'><b>Rent:</b> <span style='color:{color};'>{kpi['rentabilidad']:.1f}%</span></div>", unsafe_allow_html=True)
                 
-                # Botones con emojis
                 with cols[4]:
                     if st.session_state.rol_actual in ["Gerencia", "Auxiliar Contable"]:
                         if st.button("✏️", key=f"edit_{p.id}", help="Editar"):
@@ -832,7 +809,6 @@ def pagina_proyectos():
                             st.rerun()
                 with cols[5]:
                     if st.session_state.rol_actual in ["Gerencia", "Auxiliar Contable"]:
-                        # Popover para confirmar eliminación
                         with st.popover("🗑️", help="Eliminar"):
                             st.warning(f"¿Eliminar proyecto '{p.nombre}'?")
                             partidas = db.query(PartidaPresupuesto).filter(PartidaPresupuesto.proyecto_id == p.id).count()
@@ -851,13 +827,12 @@ def pagina_proyectos():
                         maps_url = f"https://www.google.com/maps?q={p.latitud},{p.longitud}"
                         st.link_button("🗺️", maps_url, help="Ver en mapa")
                     else:
-                        st.write("")  # placeholder
+                        st.write("")
                 with cols[7]:
                     if st.button("📊", key=f"btn_detalle_{p.id}", help="Ver detalle"):
                         st.session_state[f"show_detail_{p.id}"] = not st.session_state.get(f"show_detail_{p.id}", False)
                         st.rerun()
                 
-                # Edición en línea (se abre debajo si está activo)
                 if "proyecto_editar" in st.session_state and st.session_state.proyecto_editar == p.id:
                     with st.form(f"edit_proy_{p.id}"):
                         nuevo_nombre = st.text_input("Nombre", value=p.nombre)
@@ -898,7 +873,6 @@ def pagina_proyectos():
                                 del st.session_state.proyecto_editar
                                 st.rerun()
                 
-                # Detalle (expandible)
                 if st.session_state.get(f"show_detail_{p.id}", False):
                     st.markdown("---")
                     st.markdown(f"### 📊 Detalle Financiero - {p.nombre}")
@@ -1012,7 +986,6 @@ def pagina_partidas():
         
         if partidas:
             st.markdown("### Lista de Partidas")
-            # Tabla compacta con botones
             for idx, partida in enumerate(partidas):
                 cols = st.columns([1.8, 1.8, 0.8, 0.8, 0.8, 0.4])
                 cols[0].write(partida.categoria)
@@ -1159,16 +1132,56 @@ def pagina_gastos():
         if not gastos_filtrados:
             st.info("No hay gastos que coincidan con los filtros.")
         else:
+            # Mostrar cada gasto en un contenedor compacto similar a proyectos
             for g, pagado, saldo in gastos_filtrados:
+                proveedor = db.query(Proveedor).filter(Proveedor.id == g.proveedor_id).first()
+                proveedor_nombre = proveedor.nombre if proveedor else "N/A"
+
+                # Estado de sesión para controlar el despliegue de pagos/edición
+                show_pagos_key = f"gasto_show_pagos_{g.id}"
+                if show_pagos_key not in st.session_state:
+                    st.session_state[show_pagos_key] = False
+                edit_gasto_key = f"gasto_edit_{g.id}"
+                if edit_gasto_key not in st.session_state:
+                    st.session_state[edit_gasto_key] = False
+
                 with st.container(border=True):
-                    cols = st.columns([2.5, 1.2, 1.2, 0.4])
-                    proveedor = db.query(Proveedor).filter(Proveedor.id == g.proveedor_id).first()
-                    cols[0].markdown(f"**{g.concepto}**  \n*{g.categoria}*  \nProveedor: {proveedor.nombre if proveedor else 'N/A'}")
-                    cols[1].metric("Total", f"${g.valor_total:,.0f}")
-                    cols[2].metric("Saldo", f"${saldo:,.0f}")
+                    cols = st.columns([2.2, 1.2, 0.8, 0.8, 0.6, 0.5, 0.5, 0.5])
+                    with cols[0]:
+                        st.markdown(f"""
+                        <div style="font-size:14px; font-weight:bold; color:#0C2340;">
+                            {g.concepto}
+                        </div>
+                        <div style="font-size:12px; color:#5C768D;">
+                            {g.categoria} · {proveedor_nombre}
+                        </div>
+                        """, unsafe_allow_html=True)
+                    with cols[1]:
+                        st.markdown(f"<div style='font-size:13px;'><b>Total:</b> ${g.valor_total:,.0f}</div>", unsafe_allow_html=True)
+                    with cols[2]:
+                        st.markdown(f"<div style='font-size:13px;'><b>Pagado:</b> ${pagado:,.0f}</div>", unsafe_allow_html=True)
                     with cols[3]:
+                        color_saldo = "green" if saldo == 0 else "red"
+                        st.markdown(f"<div style='font-size:13px;'><b>Saldo:</b> <span style='color:{color_saldo};'>${saldo:,.0f}</span></div>", unsafe_allow_html=True)
+                    with cols[4]:
+                        if g.archivo_evidencia:
+                            ruta = os.path.join("uploads", g.archivo_evidencia)
+                            if os.path.exists(ruta):
+                                with open(ruta, "rb") as f:
+                                    st.download_button("📎", data=f, file_name=g.archivo_evidencia, help="Descargar documento")
+                            else:
+                                st.write("📎")
+                        else:
+                            st.write("")
+                    with cols[5]:
                         if st.session_state.rol_actual in ["Gerencia", "Auxiliar Contable"]:
-                            with st.popover("🗑️", help="Eliminar gasto"):
+                            if st.button("✏️", key=f"edit_gasto_{g.id}", help="Editar gasto"):
+                                st.session_state[edit_gasto_key] = not st.session_state[edit_gasto_key]
+                                st.rerun()
+                    with cols[6]:
+                        if st.session_state.rol_actual in ["Gerencia", "Auxiliar Contable"]:
+                            with st.popover("🗑️", help="Eliminar"):
+                                st.warning(f"¿Eliminar gasto '{g.concepto[:30]}'?")
                                 pagos_asociados = db.query(Pago).filter(Pago.gasto_id == g.id).count()
                                 if pagos_asociados > 0:
                                     st.error(f"Tiene {pagos_asociados} pagos asociados. No se puede eliminar.")
@@ -1179,26 +1192,133 @@ def pagina_gastos():
                                         registrar_auditoria("Gasto", g.id, "delete", usuario.id)
                                         st.success("Gasto eliminado")
                                         st.rerun()
-                    
-                    if saldo > 0:
-                        with st.expander(f"💳 Registrar Pago - {g.concepto[:50]} (Saldo: ${saldo:,.0f})"):
-                            with st.form(f"pago_inline_{g.id}"):
-                                tipo = st.selectbox("Tipo", ["Factura", "Anticipo"], key=f"tipo_{g.id}")
-                                n_factura = st.text_input("N° Factura", key=f"fact_{g.id}")
+                    with cols[7]:
+                        if st.button("💳", key=f"btn_pagos_{g.id}", help="Ver/Registrar pagos"):
+                            st.session_state[show_pagos_key] = not st.session_state[show_pagos_key]
+                            st.rerun()
+
+                    # Formulario de edición en línea
+                    if st.session_state[edit_gasto_key]:
+                        with st.form(f"edit_gasto_{g.id}"):
+                            st.markdown("#### ✏️ Editar Gasto")
+                            nuevo_concepto = st.text_input("Concepto", value=g.concepto)
+                            nueva_categoria = st.selectbox("Categoría", ["Materiales", "Mano de Obra", "Subcontratos", "Equipos", "Transporte", "Otros"], index=["Materiales", "Mano de Obra", "Subcontratos", "Equipos", "Transporte", "Otros"].index(g.categoria))
+                            nuevo_estado = st.selectbox("Estado de Pago", ["Pendiente", "Parcial", "Pagado"], index=["Pendiente", "Parcial", "Pagado"].index(g.estado_pago))
+                            nuevo_conciliado = st.checkbox("Conciliado", value=g.conciliado)
+                            nueva_acta = st.text_input("Acta de Conciliación", value=g.acta_conciliacion or "")
+                            nuevo_proveedor = st.selectbox("Proveedor", [p.nombre for p in db.query(Proveedor).all()] + ["➕ Crear nuevo"], index=0 if not proveedor else [p.nombre for p in db.query(Proveedor).all()].index(proveedor_nombre) if proveedor_nombre in [p.nombre for p in db.query(Proveedor).all()] else 0)
+                            if nuevo_proveedor == "➕ Crear nuevo":
+                                st.warning("Crea el proveedor desde la sección de Proveedores primero.")
+                                proveedor_id = g.proveedor_id
+                            else:
+                                prov_obj = db.query(Proveedor).filter(Proveedor.nombre == nuevo_proveedor).first()
+                                proveedor_id = prov_obj.id if prov_obj else g.proveedor_id
+                            archivo = st.file_uploader("📎 Reemplazar documento (factura, cuenta de cobro)", type=["pdf", "png", "jpg", "jpeg", "doc", "docx"], key=f"file_gasto_{g.id}")
+                            submitted = st.form_submit_button("💾 Guardar Cambios")
+                            if submitted:
+                                cambios = {}
+                                if g.concepto != nuevo_concepto:
+                                    cambios["concepto"] = (g.concepto, nuevo_concepto)
+                                    g.concepto = nuevo_concepto
+                                if g.categoria != nueva_categoria:
+                                    cambios["categoria"] = (g.categoria, nueva_categoria)
+                                    g.categoria = nueva_categoria
+                                if g.estado_pago != nuevo_estado:
+                                    cambios["estado_pago"] = (g.estado_pago, nuevo_estado)
+                                    g.estado_pago = nuevo_estado
+                                if g.conciliado != nuevo_conciliado:
+                                    cambios["conciliado"] = (g.conciliado, nuevo_conciliado)
+                                    g.conciliado = nuevo_conciliado
+                                if g.acta_conciliacion != nueva_acta:
+                                    cambios["acta_conciliacion"] = (g.acta_conciliacion, nueva_acta)
+                                    g.acta_conciliacion = nueva_acta
+                                if g.proveedor_id != proveedor_id:
+                                    cambios["proveedor_id"] = (g.proveedor_id, proveedor_id)
+                                    g.proveedor_id = proveedor_id
+                                if archivo:
+                                    if not os.path.exists("uploads"):
+                                        os.makedirs("uploads")
+                                    nombre_archivo = f"gasto_{g.id}_{archivo.name}"
+                                    ruta_completa = os.path.join("uploads", nombre_archivo)
+                                    with open(ruta_completa, "wb") as f:
+                                        f.write(archivo.getbuffer())
+                                    # Eliminar anterior si existe
+                                    if g.archivo_evidencia and os.path.exists(os.path.join("uploads", g.archivo_evidencia)):
+                                        os.remove(os.path.join("uploads", g.archivo_evidencia))
+                                    cambios["archivo_evidencia"] = (g.archivo_evidencia, nombre_archivo)
+                                    g.archivo_evidencia = nombre_archivo
+                                if cambios:
+                                    db.commit()
+                                    registrar_auditoria("Gasto", g.id, "update", usuario.id,
+                                                        datos_anteriores={k: v[0] for k, v in cambios.items()},
+                                                        datos_nuevos={k: v[1] for k, v in cambios.items()})
+                                    st.success("✅ Cambios guardados")
+                                    st.session_state[edit_gasto_key] = False
+                                    st.rerun()
+
+                    # Sección de pagos (desplegable)
+                    if st.session_state[show_pagos_key]:
+                        st.markdown("---")
+                        st.markdown(f"#### 💳 Pagos de: {g.concepto}")
+                        pagos = db.query(Pago).filter(Pago.gasto_id == g.id).order_by(desc(Pago.fecha)).all()
+                        if pagos:
+                            data_pagos = []
+                            for p in pagos:
+                                data_pagos.append({
+                                    "Fecha": p.fecha.strftime("%Y-%m-%d") if p.fecha else "",
+                                    "Tipo": p.tipo,
+                                    "Concepto": p.concepto or "",
+                                    "Monto": p.monto,
+                                    "N° Factura": p.numero_factura or "",
+                                    "Observaciones": p.observaciones or "",
+                                    "Archivo": "📎" if p.archivo_evidencia else ""
+                                })
+                            df_pagos = pd.DataFrame(data_pagos)
+                            st.dataframe(df_pagos, use_container_width=True)
+                            # Mostrar descarga de archivo de cada pago
+                            for p in pagos:
+                                if p.archivo_evidencia:
+                                    ruta_arch = os.path.join("uploads", p.archivo_evidencia)
+                                    if os.path.exists(ruta_arch):
+                                        with open(ruta_arch, "rb") as f:
+                                            st.download_button(f"📥 {p.archivo_evidencia}", data=f, file_name=p.archivo_evidencia, key=f"dl_pago_{p.id}")
+                            total_pagos_gasto = sum(p.monto for p in pagos)
+                            st.metric("Total Pagado en este Gasto", f"${total_pagos_gasto:,.0f}")
+                        else:
+                            st.info("No hay pagos registrados para este gasto.")
+
+                        # Registrar nuevo pago (con archivo)
+                        if saldo > 0:
+                            with st.form(f"nuevo_pago_{g.id}"):
+                                st.markdown("**Registrar Pago**")
+                                tipo = st.selectbox("Tipo", ["Factura", "Anticipo", "Cuenta de Cobro"], key=f"tipo_{g.id}")
+                                concepto_pago = st.selectbox("Concepto", ["Anticipo", "Avance", "Finiquito"], key=f"concepto_{g.id}")
+                                n_factura = st.text_input("N° Documento", key=f"fact_{g.id}")
                                 fecha = st.date_input("Fecha", datetime.date.today(), key=f"fecha_{g.id}")
                                 monto = st.number_input("Monto a pagar", min_value=0.0, max_value=saldo, step=1000.0, key=f"monto_{g.id}")
                                 observaciones = st.text_area("Observaciones", key=f"obs_{g.id}")
-                                submitted = st.form_submit_button("Registrar Pago")
-                                if submitted and monto > 0:
+                                archivo_pago = st.file_uploader("📎 Adjuntar recibo/comprobante", type=["pdf", "png", "jpg", "jpeg", "doc", "docx"], key=f"file_pago_{g.id}")
+                                submitted_pago = st.form_submit_button("Registrar Pago")
+                                if submitted_pago and monto > 0:
                                     nuevo_pago = Pago(
                                         gasto_id=g.id,
                                         tipo=tipo,
+                                        concepto=concepto_pago,
                                         numero_factura=n_factura,
                                         fecha=fecha,
                                         monto=monto,
                                         observaciones=observaciones,
                                         created_by=usuario.id
                                     )
+                                    # Guardar archivo
+                                    if archivo_pago:
+                                        if not os.path.exists("uploads"):
+                                            os.makedirs("uploads")
+                                        nombre_arch = f"pago_{g.id}_{archivo_pago.name}"
+                                        ruta_arch = os.path.join("uploads", nombre_arch)
+                                        with open(ruta_arch, "wb") as f:
+                                            f.write(archivo_pago.getbuffer())
+                                        nuevo_pago.archivo_evidencia = nombre_arch
                                     db.add(nuevo_pago)
                                     nuevo_total_pagado = pagado + monto
                                     if nuevo_total_pagado >= g.valor_total:
@@ -1211,8 +1331,22 @@ def pagina_gastos():
                                                         datos_anteriores={"estado_pago": g.estado_pago},
                                                         datos_nuevos={"estado_pago": g.estado_pago})
                                     st.success("✅ Pago registrado exitosamente")
+                                    st.session_state[show_pagos_key] = False  # cerrar sección
                                     st.rerun()
+                        else:
+                            st.success("✅ Este gasto ya está totalmente pagado.")
 
+            # Sumatorias de los gastos filtrados
+            total_gastos_filtrados = sum(g[0].valor_total for g in gastos_filtrados)
+            total_pagado_filtrados = sum(g[1] for g in gastos_filtrados)
+            total_saldo_filtrados = sum(g[2] for g in gastos_filtrados)
+            st.markdown("---")
+            col_s1, col_s2, col_s3 = st.columns(3)
+            col_s1.metric("💰 Total Gastos (filtrados)", f"${total_gastos_filtrados:,.0f}")
+            col_s2.metric("💵 Total Pagado (filtrados)", f"${total_pagado_filtrados:,.0f}")
+            col_s3.metric("⏳ Total Saldo Pendiente (filtrados)", f"${total_saldo_filtrados:,.0f}")
+
+        # Nuevo gasto con carga de archivo
         with st.expander("➕ Nuevo Gasto", expanded=False):
             tipo_item = st.radio("Origen del ítem", ["LPU", "Manual"], horizontal=True)
             if tipo_item == "LPU":
@@ -1259,6 +1393,9 @@ def pagina_gastos():
                     proveedor_obj = db.query(Proveedor).filter(Proveedor.nombre == proveedor_sel).first()
                     proveedor_id = proveedor_obj.id if proveedor_obj else None
 
+                # Adjuntar archivo al gasto
+                archivo_gasto = st.file_uploader("📎 Adjuntar factura del proveedor (PDF, imagen, etc.)", type=["pdf", "png", "jpg", "jpeg", "doc", "docx"])
+
                 if st.button("➕ Agregar al carrito"):
                     total_item = cantidad * val
                     st.session_state.carrito.append({
@@ -1269,8 +1406,15 @@ def pagina_gastos():
                         "cantidad": cantidad,
                         "valor_unitario": val,
                         "valor_total": total_item,
-                        "proveedor_id": proveedor_id
+                        "proveedor_id": proveedor_id,
+                        "archivo_evidencia": None  # se guardará al momento de guardar
                     })
+                    # Guardar archivo en carrito? Mejor se guarda al momento de guardar todos los gastos.
+                    # Para simplificar, se guarda el archivo en disco y se asigna al gasto al guardar.
+                    if archivo_gasto:
+                        # Guardar temporalmente? Lo haremos al guardar el gasto.
+                        # Por ahora, almacenamos el archivo en session_state para procesarlo después.
+                        st.session_state.carrito[-1]["archivo_temp"] = archivo_gasto
                     st.success("Ítem agregado al carrito")
                     st.rerun()
 
@@ -1296,7 +1440,18 @@ def pagina_gastos():
                         created_by=usuario.id
                     )
                     db.add(nuevo_gasto)
-                    db.commit()
+                    db.commit()  # para obtener el id
+                    # Guardar archivo si existe
+                    if "archivo_temp" in item and item["archivo_temp"]:
+                        if not os.path.exists("uploads"):
+                            os.makedirs("uploads")
+                        arch = item["archivo_temp"]
+                        nombre_arch = f"gasto_{nuevo_gasto.id}_{arch.name}"
+                        ruta_arch = os.path.join("uploads", nombre_arch)
+                        with open(ruta_arch, "wb") as f:
+                            f.write(arch.getbuffer())
+                        nuevo_gasto.archivo_evidencia = nombre_arch
+                        db.commit()
                     registrar_auditoria("Gasto", nuevo_gasto.id, "insert", usuario.id)
                 st.session_state.carrito = []
                 st.success("Gastos guardados exitosamente")
@@ -1341,31 +1496,80 @@ def pagina_pagos():
             st.info("No hay gastos que coincidan con los filtros para este proyecto.")
         else:
             total_pagado_general = 0
+            total_gastos_general = 0
             for gasto in gastos:
                 pagos = db.query(Pago).filter(Pago.gasto_id == gasto.id).all()
                 total_pagado = sum(p.monto for p in pagos)
                 total_pagado_general += total_pagado
+                total_gastos_general += gasto.valor_total
                 saldo = gasto.valor_total - total_pagado
+                proveedor = db.query(Proveedor).filter(Proveedor.id == gasto.proveedor_id).first()
                 with st.container(border=True):
-                    cols = st.columns([2, 1, 1])
-                    cols[0].markdown(f"**{gasto.concepto}**  \nProveedor: {db.query(Proveedor).filter(Proveedor.id == gasto.proveedor_id).first().nombre if gasto.proveedor_id else 'N/A'}")
-                    cols[1].metric("Total Gasto", f"${gasto.valor_total:,.0f}")
-                    cols[2].metric("Saldo Pendiente", f"${saldo:,.0f}")
+                    cols = st.columns([2.2, 1.2, 1.0, 0.6, 0.5])
+                    with cols[0]:
+                        st.markdown(f"""
+                        <div style="font-size:14px; font-weight:bold; color:#0C2340;">
+                            {gasto.concepto}
+                        </div>
+                        <div style="font-size:12px; color:#5C768D;">
+                            {gasto.categoria} · {proveedor.nombre if proveedor else 'N/A'}
+                        </div>
+                        """, unsafe_allow_html=True)
+                    with cols[1]:
+                        st.markdown(f"<div style='font-size:13px;'><b>Total:</b> ${gasto.valor_total:,.0f}</div>", unsafe_allow_html=True)
+                    with cols[2]:
+                        st.markdown(f"<div style='font-size:13px;'><b>Saldo:</b> ${saldo:,.0f}</div>", unsafe_allow_html=True)
+                    with cols[3]:
+                        if gasto.archivo_evidencia:
+                            ruta = os.path.join("uploads", gasto.archivo_evidencia)
+                            if os.path.exists(ruta):
+                                with open(ruta, "rb") as f:
+                                    st.download_button("📎", data=f, file_name=gasto.archivo_evidencia, help="Descargar factura")
+                            else:
+                                st.write("📎")
+                        else:
+                            st.write("")
+                    with cols[4]:
+                        if st.session_state.rol_actual in ["Gerencia", "Auxiliar Contable"]:
+                            with st.popover("🗑️", help="Eliminar gasto"):
+                                pagos_asociados = db.query(Pago).filter(Pago.gasto_id == gasto.id).count()
+                                if pagos_asociados > 0:
+                                    st.error(f"Tiene {pagos_asociados} pagos asociados. No se puede eliminar.")
+                                else:
+                                    if st.button("✅ Confirmar", key=f"del_gasto_pagos_{gasto.id}"):
+                                        db.delete(gasto)
+                                        db.commit()
+                                        registrar_auditoria("Gasto", gasto.id, "delete", usuario.id)
+                                        st.success("Gasto eliminado")
+                                        st.rerun()
                     
                     # Mostrar pagos existentes
                     if pagos:
                         st.markdown("**Pagos registrados:**")
                         for pago in pagos:
-                            cols_p = st.columns([1.2, 1.2, 1.2, 1.2, 1.5, 0.4])
-                            cols_p[0].write(pago.fecha.strftime("%Y-%m-%d"))
+                            cols_p = st.columns([1.2, 1.2, 1.2, 1.2, 1.0, 0.6, 0.4])
+                            cols_p[0].write(pago.fecha.strftime("%Y-%m-%d") if pago.fecha else "")
                             cols_p[1].write(pago.tipo)
                             cols_p[2].write(pago.concepto or "")
                             cols_p[3].write(f"${pago.monto:,.0f}")
                             cols_p[4].write(pago.numero_factura or "")
-                            with cols_p[5]:
+                            # Mostrar archivo adjunto si existe
+                            if pago.archivo_evidencia:
+                                ruta_p = os.path.join("uploads", pago.archivo_evidencia)
+                                if os.path.exists(ruta_p):
+                                    with open(ruta_p, "rb") as f:
+                                        cols_p[5].download_button("📎", data=f, file_name=pago.archivo_evidencia, help="Descargar comprobante")
+                                else:
+                                    cols_p[5].write("📎")
+                            else:
+                                cols_p[5].write("")
+                            with cols_p[6]:
                                 if st.session_state.rol_actual in ["Gerencia", "Auxiliar Contable"]:
                                     with st.popover("🗑️", help="Eliminar pago"):
                                         if st.button("✅ Confirmar", key=f"del_pago_{pago.id}"):
+                                            # Eliminar archivo si existe
+                                            if pago.archivo_evidencia and os.path.exists(os.path.join("uploads", pago.archivo_evidencia)):
+                                                os.remove(os.path.join("uploads", pago.archivo_evidencia))
                                             db.delete(pago)
                                             db.commit()
                                             registrar_auditoria("Pago", pago.id, "delete", usuario.id)
@@ -1381,6 +1585,7 @@ def pagina_pagos():
                                 fecha = st.date_input("Fecha", datetime.date.today())
                                 monto = st.number_input("Monto a pagar", min_value=0.0, max_value=saldo, step=1000.0)
                                 observaciones = st.text_area("Observaciones")
+                                archivo_pago = st.file_uploader("📎 Adjuntar recibo/comprobante", type=["pdf", "png", "jpg", "jpeg", "doc", "docx"], key=f"file_pago_form_{gasto.id}")
                                 submitted = st.form_submit_button("Registrar Pago")
                                 if submitted and monto > 0:
                                     nuevo_pago = Pago(
@@ -1393,6 +1598,14 @@ def pagina_pagos():
                                         observaciones=observaciones,
                                         created_by=usuario.id
                                     )
+                                    if archivo_pago:
+                                        if not os.path.exists("uploads"):
+                                            os.makedirs("uploads")
+                                        nombre_arch = f"pago_{gasto.id}_{archivo_pago.name}"
+                                        ruta_arch = os.path.join("uploads", nombre_arch)
+                                        with open(ruta_arch, "wb") as f:
+                                            f.write(archivo_pago.getbuffer())
+                                        nuevo_pago.archivo_evidencia = nombre_arch
                                     db.add(nuevo_pago)
                                     nuevo_total_pagado = total_pagado + monto
                                     if nuevo_total_pagado >= gasto.valor_total:
@@ -1408,8 +1621,13 @@ def pagina_pagos():
                                     st.rerun()
                     else:
                         st.success("✅ Gasto totalmente pagado")
-            # Total general de pagos
-            st.metric("💵 Total Pagado en este Proyecto", f"${total_pagado_general:,.0f}")
+            
+            # Sumatorias generales de esta página
+            st.markdown("---")
+            col_s1, col_s2, col_s3 = st.columns(3)
+            col_s1.metric("💰 Total Gastos (filtrados)", f"${total_gastos_general:,.0f}")
+            col_s2.metric("💵 Total Pagado (filtrados)", f"${total_pagado_general:,.0f}")
+            col_s3.metric("⏳ Total Saldo Pendiente", f"${total_gastos_general - total_pagado_general:,.0f}")
 
 def pagina_proveedores():
     st.markdown("## 🏢 Gestión de Proveedores")
