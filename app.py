@@ -607,19 +607,24 @@ def pagina_proyectos():
             st.session_state.nuevo_proy_cliente = "WOM"
 
         # =====================================================
-        # BLOQUE 1: BÚSQUEDA Y SELECCIÓN DEL SITIO WOM
+        # BLOQUE 1: SELECCIÓN DE CLIENTE Y BÚSQUEDA DE SITIO (si aplica)
         # Fuera del form para permitir reactividad dinámica.
         # =====================================================
-        cliente_externo = st.text_input(
+        opciones_clientes = ["WOM", "HUAWEI WOM", "UNIRED", "TELEFONICA", "OTROS"]
+        cliente_seleccionado = st.selectbox(
             "Cliente",
-            value=st.session_state.nuevo_proy_cliente,
-            key="nuevo_proy_cliente_input"
+            options=opciones_clientes,
+            index=opciones_clientes.index(st.session_state.nuevo_proy_cliente) 
+                  if st.session_state.nuevo_proy_cliente in opciones_clientes else 0,
+            key="nuevo_proy_cliente_select"
         )
-        # Sincronizar cliente en session_state
-        if cliente_externo != st.session_state.nuevo_proy_cliente:
-            st.session_state.nuevo_proy_cliente = cliente_externo
+        # Sincronizar session_state y reiniciar sitio si cambia el cliente
+        if cliente_seleccionado != st.session_state.nuevo_proy_cliente:
+            st.session_state.nuevo_proy_cliente = cliente_seleccionado
             st.session_state.sitio_seleccionado = None
             st.rerun()
+
+        cliente_externo = cliente_seleccionado  # usaremos esta variable para el resto
 
         if "WOM" in cliente_externo.upper():
             st.markdown("#### 🏢 Buscar sitio en base de datos WOM")
@@ -702,7 +707,6 @@ def pagina_proyectos():
 
         # =====================================================
         # BLOQUE 2: FORMULARIO FINAL DE CAPTURA Y GUARDADO
-        # Solo contiene campos editables y el botón guardar.
         # =====================================================
         with st.form("nuevo_proyecto"):
             st.markdown("#### 📝 Datos del Proyecto")
@@ -726,7 +730,7 @@ def pagina_proyectos():
                     nuevo = Proyecto(
                         nombre=nombre,
                         ubicacion=ubicacion,
-                        cliente=cliente_externo,
+                        cliente=cliente_externo,  # usa el cliente seleccionado
                         n_requerimiento=n_requerimiento,
                         acta_conciliacion=acta,
                         estado=estado,
