@@ -20,18 +20,22 @@ import plotly.graph_objects as go
 
 Base.metadata.create_all(bind=engine)
 
-# Agregar columna archivo_evidencia a la tabla pagos si no existe
+# (Opcional) Verificar que la columna exista en la BD, pero ya está en el modelo
 try:
     with engine.connect() as conn:
-        result = conn.execute(text(
-            "SELECT column_name FROM information_schema.columns "
-            "WHERE table_name='pagos' AND column_name='archivo_evidencia'"
-        ))
+        if engine.dialect.name == 'sqlite':
+            result = conn.execute(text(
+                "SELECT name FROM pragma_table_info('pagos') WHERE name='archivo_evidencia'"
+            ))
+        else:
+            result = conn.execute(text(
+                "SELECT column_name FROM information_schema.columns "
+                "WHERE table_name='pagos' AND column_name='archivo_evidencia'"
+            ))
         if not result.fetchone():
             conn.execute(text("ALTER TABLE pagos ADD COLUMN archivo_evidencia VARCHAR(500)"))
             conn.commit()
 except Exception as e:
-    # Si no se puede (ej. SQLite), se ignora
     pass
 
 def encriptar_password(password: str) -> str:
@@ -114,7 +118,7 @@ if "autenticado" not in st.session_state:
     st.session_state.carrito = []
     st.session_state.partidas_temp = []
     st.session_state.pago_abierto = None
-    st.session_state.gastos_show_pagos = {}  # dict para controlar despliegue de pagos
+    st.session_state.gastos_show_pagos = {}
 
 def cerrar_sesion():
     st.session_state.autenticado = False
@@ -160,7 +164,6 @@ def cargar_lpu():
                 return df
             except:
                 pass
-    # Datos de ejemplo
     return pd.DataFrame({
         "CÓDIGO": ["8828119377", "8828119094", "8828119411", "8828120200"],
         "DESCRIPCIÓN": ["Traslado de Sondas. Incluye Transporte entre Estaciones", "Excavación para Instalación de Tubería EMT/PVC", "Instalación de nuevo sector, incluye hasta 3 elementos", "Apertura y Cierre de Cañuelas incluye Fusible"],
@@ -1132,12 +1135,10 @@ def pagina_gastos():
         if not gastos_filtrados:
             st.info("No hay gastos que coincidan con los filtros.")
         else:
-            # Mostrar cada gasto en un contenedor compacto similar a proyectos
             for g, pagado, saldo in gastos_filtrados:
                 proveedor = db.query(Proveedor).filter(Proveedor.id == g.proveedor_id).first()
                 proveedor_nombre = proveedor.nombre if proveedor else "N/A"
 
-                # Estado de sesión para controlar el despliegue de pagos/edición
                 show_pagos_key = f"gasto_show_pagos_{g.id}"
                 if show_pagos_key not in st.session_state:
                     st.session_state[show_pagos_key] = False
@@ -1197,7 +1198,6 @@ def pagina_gastos():
                             st.session_state[show_pagos_key] = not st.session_state[show_pagos_key]
                             st.rerun()
 
-                    # Formulario de edición en línea
                     if st.session_state[edit_gasto_key]:
                         with st.form(f"edit_gasto_{g.id}"):
                             st.markdown("#### ✏️ Editar Gasto")
@@ -1242,7 +1242,6 @@ def pagina_gastos():
                                     ruta_completa = os.path.join("uploads", nombre_archivo)
                                     with open(ruta_completa, "wb") as f:
                                         f.write(archivo.getbuffer())
-                                    # Eliminar anterior si existe
                                     if g.archivo_evidencia and os.path.exists(os.path.join("uploads", g.archivo_evidencia)):
                                         os.remove(os.path.join("uploads", g.archivo_evidencia))
                                     cambios["archivo_evidencia"] = (g.archivo_evidencia, nombre_archivo)
@@ -1256,7 +1255,6 @@ def pagina_gastos():
                                     st.session_state[edit_gasto_key] = False
                                     st.rerun()
 
-                    # Sección de pagos (desplegable)
                     if st.session_state[show_pagos_key]:
                         st.markdown("---")
                         st.markdown(f"#### 💳 Pagos de: {g.concepto}")
@@ -1264,6 +1262,7 @@ def pagina_gastos():
                         if pagos:
                             data_pagos = []
                             for p in pagos:
+                                archivo = getattr(p, 'archivo_evidencia', None)
                                 data_pagos.append({
                                     "Fecha": p.fecha.strftime("%Y-%m-%d") if p.fecha else "",
                                     "Tipo": p.tipo,
@@ -1271,23 +1270,22 @@ def pagina_gastos():
                                     "Monto": p.monto,
                                     "N° Factura": p.numero_factura or "",
                                     "Observaciones": p.observaciones or "",
-                                    "Archivo": "📎" if p.archivo_evidencia else ""
+                                    "Archivo": "📎" if archivo else ""
                                 })
                             df_pagos = pd.DataFrame(data_pagos)
                             st.dataframe(df_pagos, use_container_width=True)
-                            # Mostrar descarga de archivo de cada pago
                             for p in pagos:
-                                if p.archivo_evidencia:
-                                    ruta_arch = os.path.join("uploads", p.archivo_evidencia)
+                                archivo = getattr(p, 'archivo_evidencia', None)
+                                if archivo:
+                                    ruta_arch = os.path.join("uploads", archivo)
                                     if os.path.exists(ruta_arch):
                                         with open(ruta_arch, "rb") as f:
-                                            st.download_button(f"📥 {p.archivo_evidencia}", data=f, file_name=p.archivo_evidencia, key=f"dl_pago_{p.id}")
+                                            st.download_button(f"📥 {archivo}", data=f, file_name=archivo, key=f"dl_pago_{p.id}")
                             total_pagos_gasto = sum(p.monto for p in pagos)
                             st.metric("Total Pagado en este Gasto", f"${total_pagos_gasto:,.0f}")
                         else:
                             st.info("No hay pagos registrados para este gasto.")
 
-                        # Registrar nuevo pago (con archivo)
                         if saldo > 0:
                             with st.form(f"nuevo_pago_{g.id}"):
                                 st.markdown("**Registrar Pago**")
@@ -1310,7 +1308,6 @@ def pagina_gastos():
                                         observaciones=observaciones,
                                         created_by=usuario.id
                                     )
-                                    # Guardar archivo
                                     if archivo_pago:
                                         if not os.path.exists("uploads"):
                                             os.makedirs("uploads")
@@ -1331,12 +1328,11 @@ def pagina_gastos():
                                                         datos_anteriores={"estado_pago": g.estado_pago},
                                                         datos_nuevos={"estado_pago": g.estado_pago})
                                     st.success("✅ Pago registrado exitosamente")
-                                    st.session_state[show_pagos_key] = False  # cerrar sección
+                                    st.session_state[show_pagos_key] = False
                                     st.rerun()
                         else:
                             st.success("✅ Este gasto ya está totalmente pagado.")
 
-            # Sumatorias de los gastos filtrados
             total_gastos_filtrados = sum(g[0].valor_total for g in gastos_filtrados)
             total_pagado_filtrados = sum(g[1] for g in gastos_filtrados)
             total_saldo_filtrados = sum(g[2] for g in gastos_filtrados)
@@ -1346,7 +1342,6 @@ def pagina_gastos():
             col_s2.metric("💵 Total Pagado (filtrados)", f"${total_pagado_filtrados:,.0f}")
             col_s3.metric("⏳ Total Saldo Pendiente (filtrados)", f"${total_saldo_filtrados:,.0f}")
 
-        # Nuevo gasto con carga de archivo
         with st.expander("➕ Nuevo Gasto", expanded=False):
             tipo_item = st.radio("Origen del ítem", ["LPU", "Manual"], horizontal=True)
             if tipo_item == "LPU":
@@ -1393,7 +1388,6 @@ def pagina_gastos():
                     proveedor_obj = db.query(Proveedor).filter(Proveedor.nombre == proveedor_sel).first()
                     proveedor_id = proveedor_obj.id if proveedor_obj else None
 
-                # Adjuntar archivo al gasto
                 archivo_gasto = st.file_uploader("📎 Adjuntar factura del proveedor (PDF, imagen, etc.)", type=["pdf", "png", "jpg", "jpeg", "doc", "docx"])
 
                 if st.button("➕ Agregar al carrito"):
@@ -1407,13 +1401,9 @@ def pagina_gastos():
                         "valor_unitario": val,
                         "valor_total": total_item,
                         "proveedor_id": proveedor_id,
-                        "archivo_evidencia": None  # se guardará al momento de guardar
+                        "archivo_evidencia": None
                     })
-                    # Guardar archivo en carrito? Mejor se guarda al momento de guardar todos los gastos.
-                    # Para simplificar, se guarda el archivo en disco y se asigna al gasto al guardar.
                     if archivo_gasto:
-                        # Guardar temporalmente? Lo haremos al guardar el gasto.
-                        # Por ahora, almacenamos el archivo en session_state para procesarlo después.
                         st.session_state.carrito[-1]["archivo_temp"] = archivo_gasto
                     st.success("Ítem agregado al carrito")
                     st.rerun()
@@ -1440,8 +1430,7 @@ def pagina_gastos():
                         created_by=usuario.id
                     )
                     db.add(nuevo_gasto)
-                    db.commit()  # para obtener el id
-                    # Guardar archivo si existe
+                    db.commit()
                     if "archivo_temp" in item and item["archivo_temp"]:
                         if not os.path.exists("uploads"):
                             os.makedirs("uploads")
@@ -1543,22 +1532,21 @@ def pagina_pagos():
                                         st.success("Gasto eliminado")
                                         st.rerun()
                     
-                    # Mostrar pagos existentes
                     if pagos:
                         st.markdown("**Pagos registrados:**")
                         for pago in pagos:
+                            archivo = getattr(pago, 'archivo_evidencia', None)
                             cols_p = st.columns([1.2, 1.2, 1.2, 1.2, 1.0, 0.6, 0.4])
                             cols_p[0].write(pago.fecha.strftime("%Y-%m-%d") if pago.fecha else "")
                             cols_p[1].write(pago.tipo)
                             cols_p[2].write(pago.concepto or "")
                             cols_p[3].write(f"${pago.monto:,.0f}")
                             cols_p[4].write(pago.numero_factura or "")
-                            # Mostrar archivo adjunto si existe
-                            if pago.archivo_evidencia:
-                                ruta_p = os.path.join("uploads", pago.archivo_evidencia)
+                            if archivo:
+                                ruta_p = os.path.join("uploads", archivo)
                                 if os.path.exists(ruta_p):
                                     with open(ruta_p, "rb") as f:
-                                        cols_p[5].download_button("📎", data=f, file_name=pago.archivo_evidencia, help="Descargar comprobante")
+                                        cols_p[5].download_button("📎", data=f, file_name=archivo, help="Descargar comprobante")
                                 else:
                                     cols_p[5].write("📎")
                             else:
@@ -1567,9 +1555,8 @@ def pagina_pagos():
                                 if st.session_state.rol_actual in ["Gerencia", "Auxiliar Contable"]:
                                     with st.popover("🗑️", help="Eliminar pago"):
                                         if st.button("✅ Confirmar", key=f"del_pago_{pago.id}"):
-                                            # Eliminar archivo si existe
-                                            if pago.archivo_evidencia and os.path.exists(os.path.join("uploads", pago.archivo_evidencia)):
-                                                os.remove(os.path.join("uploads", pago.archivo_evidencia))
+                                            if archivo and os.path.exists(os.path.join("uploads", archivo)):
+                                                os.remove(os.path.join("uploads", archivo))
                                             db.delete(pago)
                                             db.commit()
                                             registrar_auditoria("Pago", pago.id, "delete", usuario.id)
@@ -1622,7 +1609,6 @@ def pagina_pagos():
                     else:
                         st.success("✅ Gasto totalmente pagado")
             
-            # Sumatorias generales de esta página
             st.markdown("---")
             col_s1, col_s2, col_s3 = st.columns(3)
             col_s1.metric("💰 Total Gastos (filtrados)", f"${total_gastos_general:,.0f}")
@@ -1843,7 +1829,6 @@ def pagina_conciliacion():
                     st.session_state.gastos_ids = []
                     st.rerun()
 
-            # --- EDICIÓN INDIVIDUAL DE UN GASTO ---
             st.markdown("---")
             st.markdown("#### ✏️ Edición individual de un gasto")
             if gastos:
