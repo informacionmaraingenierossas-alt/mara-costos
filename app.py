@@ -466,7 +466,7 @@ st.sidebar.markdown(f"""
 border-bottom:1px solid rgba(255,255,255,0.1);margin-bottom:14px;">
   {_logo_img}
   <div style="font-size:16px;font-weight:800;color:#ffffff;letter-spacing:.5px;margin-bottom:3px;">
-    ERP PROYECTOS
+    MARA INGENIEROS
   </div>
   <div style="font-size:10px;color:#7a9ab8;letter-spacing:.3px;">
     Ingeniería de calidad
