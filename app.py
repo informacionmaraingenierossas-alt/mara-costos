@@ -58,15 +58,13 @@ st.set_page_config(page_title="MARA INGENIEROS - Control de Costos", layout="wid
 # ============================================
 st.markdown("""
     <style>
-    /* ── VARIABLES DE COLOR ── */
     :root {
-        --sidebar-bg:    #2b6bc5;
-        --sidebar-hover: #c5382b;
-        --sidebar-active:#c5382b;
+        --sidebar-bg:    #0f2544;
+        --sidebar-hover: #17375e;
+        --sidebar-active:#1e4a7a;
         --sidebar-text:  #c8d8e8;
         --sidebar-muted: #7a9ab8;
         --accent:        #3b82f6;
-        --accent-light:  #eff6ff;
         --white:         #ffffff;
         --body-bg:       #f4f6f9;
         --card-bg:       #ffffff;
@@ -74,51 +72,45 @@ st.markdown("""
         --text-primary:  #1e293b;
         --text-secondary:#64748b;
         --success:       #22c55e;
-        --warning:       #f59e0b;
-        --danger:        #ef4444;
     }
 
-    /* ── LAYOUT GENERAL ── */
     html, body { font-size: 14px; background: var(--body-bg); }
     .stApp { background: var(--body-bg) !important; }
     section[data-testid="stMain"] { background: var(--body-bg) !important; }
 
     .block-container {
-        max-width: 100% !important;
-        width: 100% !important;
+        max-width: 100% !important; width: 100% !important;
         margin: 0 auto !important;
-        padding-top: .5rem !important;
-        padding-bottom: .5rem !important;
-        padding-left: 1.2rem !important;
-        padding-right: 1.2rem !important;
+        padding-top: .5rem !important; padding-bottom: .5rem !important;
+        padding-left: 1.2rem !important; padding-right: 1.2rem !important;
     }
 
-    /* ── SIDEBAR OSCURO ── */
+    /* ── SIDEBAR ── */
     section[data-testid="stSidebar"] {
         background-color: var(--sidebar-bg) !important;
-        width: 220px !important;
-        min-width: 220px !important;
-        max-width: 220px !important;
+        width: 220px !important; min-width: 220px !important; max-width: 220px !important;
         border-right: none !important;
     }
-    section[data-testid="stSidebar"] * {
-        color: var(--sidebar-text) !important;
-        font-size: 13px !important;
-    }
+    section[data-testid="stSidebar"] * { color: var(--sidebar-text) !important; font-size: 13px !important; }
+
     section[data-testid="stSidebar"] .stButton button {
         background-color: transparent !important;
         color: var(--sidebar-text) !important;
         border: none !important;
         border-radius: 8px !important;
         font-weight: 500 !important;
-        font-size: 13px !important;
-        padding: 8px 14px !important;
+        font-size: 13.5px !important;
+        padding: 0px 16px !important;
         width: 100% !important;
         text-align: left !important;
-        height: 42px !important;
-        min-height: 42px !important;
-        transition: all 0.18s ease !important;
-        margin-bottom: 2px !important;
+        justify-content: flex-start !important;
+        display: flex !important;
+        height: 44px !important;
+        min-height: 44px !important;
+        line-height: 44px !important;
+        transition: background 0.15s ease, transform 0.15s ease !important;
+        margin-bottom: 3px !important;
+        letter-spacing: .1px !important;
     }
     section[data-testid="stSidebar"] .stButton button:hover {
         background-color: var(--sidebar-hover) !important;
@@ -132,97 +124,31 @@ st.markdown("""
         font-weight: 700 !important;
     }
     section[data-testid="stSidebar"] hr {
-        border-color: rgba(255,255,255,0.1) !important;
-        margin: 10px 0 !important;
+        border-color: rgba(255,255,255,0.1) !important; margin: 10px 0 !important;
     }
 
     /* ── TOPBAR ── */
     .erp-topbar {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        background: var(--white);
-        border-bottom: 1px solid var(--border);
-        padding: 10px 20px;
-        margin-bottom: 16px;
-        border-radius: 0 0 8px 8px;
-        box-shadow: 0 1px 4px rgba(0,0,0,.06);
+        display: flex; align-items: center; justify-content: space-between;
+        background: var(--white); border-bottom: 1px solid var(--border);
+        padding: 10px 20px; margin-bottom: 16px;
+        border-radius: 0 0 8px 8px; box-shadow: 0 1px 4px rgba(0,0,0,.06);
     }
     .erp-topbar-left { display: flex; align-items: center; gap: 12px; }
-    .erp-menu-icon { font-size: 18px; color: var(--text-secondary); }
-    .erp-company-name { font-weight: 700; font-size: 13px; color: var(--text-primary); }
-    .erp-company-info { font-size: 11px; color: var(--text-secondary); }
-    .erp-topbar-center .erp-module { font-size: 13px; font-weight: 600; color: var(--text-secondary); }
-    .erp-topbar-right { display: flex; align-items: center; gap: 14px; }
-    .erp-status { font-size: 12px; color: var(--success); font-weight: 500; }
-    .erp-date { font-size: 12px; color: var(--text-secondary); }
 
-    /* ── MÉTRICAS NATIVAS STREAMLIT ── */
-    [data-testid="stMetricValue"] {
-        font-size: 22px !important;
-        font-weight: 700 !important;
-        color: var(--text-primary) !important;
-    }
-    [data-testid="stMetricLabel"] {
-        font-size: 12px !important;
-        color: var(--text-secondary) !important;
-        font-weight: 500 !important;
-    }
-    [data-testid="stMetricDelta"] { font-size: 12px !important; }
+    /* ── MÉTRICAS ── */
+    [data-testid="stMetricValue"] { font-size: 22px !important; font-weight: 700 !important; color: var(--text-primary) !important; }
+    [data-testid="stMetricLabel"] { font-size: 12px !important; color: var(--text-secondary) !important; font-weight: 500 !important; }
     [data-testid="stMetric"] {
-        background: var(--card-bg);
-        border: 1px solid var(--border);
-        border-radius: 10px;
-        padding: 14px 18px !important;
+        background: var(--card-bg); border: 1px solid var(--border);
+        border-radius: 10px; padding: 14px 18px !important;
         box-shadow: 0 1px 3px rgba(0,0,0,.04);
     }
-
-    /* ── TARJETA MÉTRICA PERSONALIZADA ── */
-    .kpi-card {
-        background: var(--card-bg);
-        border: 1px solid var(--border);
-        border-radius: 10px;
-        padding: 18px 20px;
-        display: flex;
-        align-items: center;
-        gap: 14px;
-        box-shadow: 0 1px 4px rgba(0,0,0,.05);
-        margin-bottom: 6px;
-    }
-    .kpi-icon { font-size: 28px; line-height: 1; }
-    .kpi-label { font-size: 12px; color: var(--text-secondary); font-weight: 500; margin-bottom: 4px; }
-    .kpi-value { font-size: 22px; font-weight: 700; color: var(--text-primary); }
-
-    /* ── FILTROS CARD ── */
-    .filtros-card {
-        background: var(--card-bg);
-        border: 1px solid var(--border);
-        border-radius: 10px;
-        padding: 16px 20px;
-        margin-bottom: 14px;
-        box-shadow: 0 1px 3px rgba(0,0,0,.04);
-    }
-    .filtros-titulo {
-        font-size: 14px; font-weight: 600; color: var(--accent);
-        display: flex; align-items: center; gap: 8px; margin-bottom: 12px;
-    }
-
-    /* ── INFO BAR ── */
-    .info-bar {
-        background: #eff6ff; border: 1px solid #bfdbfe;
-        border-radius: 8px; padding: 10px 16px; font-size: 13px;
-        color: var(--text-primary); margin-bottom: 14px;
-        display: flex; gap: 20px; align-items: center;
-    }
-    .info-bar span { font-weight: 600; }
-    .info-bar .acta-badge { color: var(--accent); font-weight: 700; }
 
     /* ── EXPANDERS ── */
     div[data-testid="stExpander"] {
-        background: var(--card-bg) !important;
-        border: 1px solid var(--border) !important;
-        border-radius: 10px !important;
-        margin-bottom: 8px !important;
+        background: var(--card-bg) !important; border: 1px solid var(--border) !important;
+        border-radius: 10px !important; margin-bottom: 8px !important;
     }
 
     /* ── INPUTS ── */
@@ -230,19 +156,15 @@ st.markdown("""
         height: 36px !important; font-size: 13px !important;
         border-radius: 8px !important; border: 1px solid var(--border) !important;
     }
-    .stSelectbox div[data-baseweb="select"] {
-        min-height: 36px !important; font-size: 13px !important; border-radius: 8px !important;
-    }
+    .stSelectbox div[data-baseweb="select"] { min-height: 36px !important; font-size: 13px !important; border-radius: 8px !important; }
     textarea { font-size: 13px !important; border-radius: 8px !important; }
     label { margin-bottom: 3px !important; font-size: 13px !important; font-weight: 500 !important; }
-    .stTextInput, .stNumberInput, .stDateInput, .stSelectbox, .stTextArea { width: 100% !important; }
 
     /* ── BOTONES ── */
     .stButton > button {
         height: 36px !important; min-height: 36px !important;
         padding: 0 16px !important; border-radius: 8px !important;
-        font-size: 13px !important; font-weight: 600 !important;
-        transition: all .18s !important;
+        font-size: 13px !important; font-weight: 600 !important; transition: all .18s !important;
     }
 
     /* ── DATAFRAMES ── */
@@ -253,10 +175,7 @@ st.markdown("""
     table { font-size: 13px !important; }
 
     /* ── FORMULARIOS ── */
-    div[data-testid="stForm"] {
-        width: 100% !important; max-width: 100% !important;
-        padding: 0 !important; margin: 0 !important;
-    }
+    div[data-testid="stForm"] { width: 100% !important; max-width: 100% !important; padding: 0 !important; margin: 0 !important; }
 
     /* ── ESPACIADO ── */
     div[data-testid="stVerticalBlock"] { gap: .30rem !important; }
@@ -271,19 +190,18 @@ st.markdown("""
     h3 { font-size: 17px !important; font-weight: 600 !important; color: var(--text-primary) !important; }
     h4 { font-size: 15px !important; font-weight: 600 !important; }
 
-    /* ── METRIC CARD LEGACY ── */
     .metric-card {
         padding: 14px 18px; border-radius: 10px;
         background: var(--card-bg); border: 1px solid var(--border);
         margin-bottom: 6px; box-shadow: 0 1px 3px rgba(0,0,0,.05);
     }
-
-    /* ── MISC ── */
     hr { border-color: var(--border) !important; margin: 10px 0 !important; }
     .main-title { font-size: 26px !important; font-weight: 700; color: var(--text-primary); text-align: center; margin-bottom: 3px; }
     .subtitle { font-size: 14px !important; color: var(--text-secondary); text-align: center; margin-bottom: 15px; }
+
     </style>
 """, unsafe_allow_html=True)
+
 
 # ============================================
 # ESTADO DE SESIÓN
@@ -430,13 +348,90 @@ st.markdown('''
 ''', unsafe_allow_html=True)
 
 if not st.session_state.autenticado:
-    st.markdown("---")
-    col_login_1, col_login_2, col_login_3 = st.columns([1, 1, 1])
-    with col_login_2:
-        st.markdown("### 🔑 Ingreso al Sistema")
-        u = st.text_input("Usuario")
-        p = st.text_input("Contraseña", type="password")
-        if st.button("🚀 Iniciar Sesión", use_container_width=True):
+    import base64 as _b64_login, os as _os_login
+
+    # Ocultar sidebar SOLO en login y centrar contenido
+    st.markdown("""
+    <style>
+    section[data-testid="stSidebar"] { display: none !important; }
+    .block-container {
+        padding-top: 0 !important;
+        padding-left: 0 !important;
+        padding-right: 0 !important;
+        max-width: 100% !important;
+    }
+    /* Fondo completo de login */
+    .stApp {
+        background: linear-gradient(135deg, #0f2544 0%, #1a3f6f 50%, #0f2544 100%) !important;
+        min-height: 100vh;
+    }
+    section[data-testid="stMain"] {
+        background: transparent !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+    # Cargar logo como base64
+    _logo_b64_login = ""
+    _logo_path_login = _os_login.path.join(_os_login.path.dirname(__file__), "Logo.png")
+    if _os_login.path.exists(_logo_path_login):
+        with open(_logo_path_login, "rb") as _f:
+            _logo_b64_login = _b64_login.b64encode(_f.read()).decode()
+
+    _logo_tag = (
+        f'''<img src="data:image/png;base64,{_logo_b64_login}"
+        style="width:100px;height:100px;object-fit:contain;display:block;margin:0 auto 12px auto;">''' 
+        if _logo_b64_login 
+        else '<div style="font-size:60px;text-align:center;margin-bottom:12px;">📊</div>'
+    )
+
+    # Tarjeta de login — todo dentro de un solo bloque HTML + formulario nativo Streamlit
+    st.markdown(f"""
+    <div style="
+        display:flex; align-items:center; justify-content:center;
+        min-height:100vh; padding:20px;
+    ">
+      <div style="
+        background:#ffffff; border-radius:20px;
+        padding:40px 40px 32px 40px;
+        width:100%; max-width:400px;
+        box-shadow:0 28px 80px rgba(0,0,0,0.35);
+        text-align:center;
+        margin: 0 auto;
+      ">
+        {_logo_tag}
+        <div style="font-size:21px;font-weight:800;color:#0f2544;
+        letter-spacing:.5px;margin-bottom:4px;">
+          ERP PROYECTOS
+        </div>
+        <div style="font-size:11px;color:#94a3b8;letter-spacing:.6px;
+        text-transform:uppercase;margin-bottom:6px;">
+          Ingeniería de calidad · NIT 901269969-5
+        </div>
+        <div style="height:1px;background:#e2e8f0;margin:18px 0 6px 0;"></div>
+        <p style="font-size:12px;font-weight:600;color:#64748b;
+        letter-spacing:.3px;margin-bottom:0;">INICIAR SESIÓN</p>
+      </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # Campos de formulario centrados debajo de la tarjeta usando columnas
+    _, col_c, _ = st.columns([1, 1.6, 1])
+    with col_c:
+        # Espacio negativo para subir los campos sobre la tarjeta visualmente
+        st.markdown("""
+        <div style="
+            background:#fff; border-radius:0 0 20px 20px;
+            margin-top:-200px; padding:16px 24px 24px 24px;
+            box-shadow:0 28px 80px rgba(0,0,0,0.35);
+        ">
+        </div>
+        """, unsafe_allow_html=True)
+
+        u = st.text_input("Usuario", placeholder="Ingresa tu usuario", label_visibility="collapsed")
+        p = st.text_input("Contraseña", type="password", placeholder="Contraseña", label_visibility="collapsed")
+        st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
+        if st.button("🚀  Iniciar Sesión", use_container_width=True, type="primary"):
             p_hash = encriptar_password(p)
             user = db.query(Usuario).filter(Usuario.nombre == u).first()
             if user and (user.password_hash == p_hash or user.password_hash == p):
@@ -445,52 +440,55 @@ if not st.session_state.autenticado:
                 st.session_state.rol_actual = user.rol
                 st.rerun()
             else:
-                st.error("Credenciales de acceso incorrectas")
+                st.error("❌ Usuario o contraseña incorrectos")
+        st.markdown("""
+        <p style="font-size:11px;color:#94a3b8;text-align:center;margin-top:12px;">
+        © 2026 MARA Ingenieros · Sistema ERP
+        </p>""", unsafe_allow_html=True)
     st.stop()
 
 # ============================================
 # SIDEBAR CON ÍCONOS Y PERMISOS
 # ============================================
 
-st.sidebar.markdown("""
-<div style="
-text-align:center;
-padding:10px 0 20px 0;
-border-bottom:1px solid #d6dce5;
-margin-bottom:15px;
-">
+import base64 as _b64, os as _os
+_logo_path = _os.path.join(_os.path.dirname(__file__), "Logo.png")
+_logo_b64 = ""
+if _os.path.exists(_logo_path):
+    with open(_logo_path, "rb") as _f:
+        _logo_b64 = _b64.b64encode(_f.read()).decode()
 
-<div style="
-font-size:22px;
-font-weight:700;
-color:#0C2340;
-">
-Ⓜ️ MARA ERP
-</div>
+_logo_img = f'''<img src="data:image/png;base64,{_logo_b64}"
+    style="width:56px;height:56px;object-fit:contain;margin-bottom:6px;">''' if _logo_b64 else '<div style="font-size:36px;margin-bottom:6px;">📊</div>'
 
-<div style="
-font-size:12px;
-color:#4B5563;
-">
-Ingeniería de Calidad
-</div>
-
+st.sidebar.markdown(f"""
+<div style="text-align:center;padding:20px 12px 16px 12px;
+border-bottom:1px solid rgba(255,255,255,0.1);margin-bottom:14px;">
+  {_logo_img}
+  <div style="font-size:16px;font-weight:800;color:#ffffff;letter-spacing:.5px;margin-bottom:3px;">
+    ERP PROYECTOS
+  </div>
+  <div style="font-size:10px;color:#7a9ab8;letter-spacing:.3px;">
+    Ingeniería de calidad
+  </div>
 </div>
 """, unsafe_allow_html=True)
 
 st.sidebar.markdown(f"""
-<div style="
-background:white;
-border-radius:10px;
-padding:12px;
-margin-bottom:15px;
-border:1px solid #d6dce5;
-text-align: center;width: 100%;height: auto;
-">
-
-<b>👤 {st.session_state.usuario_actual}</b><br>
-
-<small>{st.session_state.rol_actual}</small>
+<div style="background:rgba(255,255,255,0.08);border-radius:10px;
+padding:10px 14px;margin-bottom:10px;border:1px solid rgba(255,255,255,0.12);">
+  <div style="display:flex;align-items:center;gap:10px;">
+    <div style="width:36px;height:36px;border-radius:50%;background:#1e4a7a;
+    display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;">👤</div>
+    <div>
+      <div style="font-size:11px;color:#7a9ab8;line-height:1.3;">
+        Rol: <b style='color:#c8d8e8;'>{st.session_state.rol_actual}</b>
+      </div>
+      <div style="font-size:13px;font-weight:700;color:#ffffff;line-height:1.4;">
+        Usuario: {st.session_state.usuario_actual}
+      </div>
+    </div>
+  </div>
 </div>
 """, unsafe_allow_html=True)
 
@@ -526,27 +524,28 @@ def opcion_con_icono(opcion):
 if "menu" not in st.session_state:
     st.session_state.menu = opciones_base[0]
 
+st.sidebar.markdown("""
+<div style="font-size:10px;font-weight:700;letter-spacing:1.2px;
+color:#7a9ab8;padding:4px 14px 6px 14px;text-transform:uppercase;">
+NAVEGACIÓN
+</div>
+""", unsafe_allow_html=True)
+
 for opcion in opciones_base:
-
     icono = iconos.get(opcion, "📄")
-
     activo = st.session_state.menu == opcion
-
-    if activo:
-        texto = f"▶ {icono}  {opcion}"
-        tipo = "primary"
-    else:
-        texto = f"{icono}  {opcion}"
-        tipo = "secondary"
-
-    if st.sidebar.button(
-        texto,
-        key=f"menu_{opcion}",
-        use_container_width=True,
-        type=tipo
-    ):
+    texto = f"{icono}  {opcion}"
+    tipo = "primary" if activo else "secondary"
+    if st.sidebar.button(texto, key=f"menu_{opcion}", use_container_width=True, type=tipo):
         st.session_state.menu = opcion
         st.rerun()
+
+st.sidebar.markdown("---")
+st.sidebar.markdown("""
+<div style="padding:6px 14px 4px 14px;font-size:10px;color:#7a9ab8;text-align:center;line-height:1.8;">
+NIT. 901269969-5 · Ingeniería de calidad
+</div>
+""", unsafe_allow_html=True)
 
 menu = st.session_state.menu
 
@@ -3296,6 +3295,24 @@ def pagina_usuarios():
 # ============================================
 # EJECUCIÓN DE LA PÁGINA SEGÚN MENÚ
 # ============================================
+
+# ── TOPBAR ──
+import datetime as _dt
+_fecha_actual = _dt.date.today().strftime("%d/%m/%Y")
+st.markdown(f"""
+<div class="erp-topbar">
+    <div class="erp-topbar-left">
+        <span style="font-size:20px;color:#94a3b8;cursor:pointer;margin-right:4px;">☰</span>
+        <span style="font-size:13px;color:#94a3b8;font-weight:500;letter-spacing:.2px;">NIT. 901269969-5</span>
+        <span style="color:#cbd5e1;font-size:18px;margin:0 6px;line-height:1;">·</span>
+        <span style="font-size:13px;color:#1e293b;font-weight:600;">Ingeniería de calidad</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:6px;">
+        <span style="font-size:13px;color:#64748b;">📅</span>
+        <span style="font-size:13px;color:#1e293b;font-weight:500;">{_fecha_actual}</span>
+    </div>
+</div>
+""", unsafe_allow_html=True)
 
 if menu == "Dashboard":
     pagina_dashboard()
